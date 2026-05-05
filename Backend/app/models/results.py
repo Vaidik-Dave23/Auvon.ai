@@ -12,6 +12,7 @@ class Test_Result(Base):
     test_id = Column(Integer, ForeignKey('tests.id'))
     best_score = Column(Integer)
     last_score = Column(Integer)
+    last_feedback = Column(String, nullable=True)  # stored so we don't re-call AI
 
     user = relationship("User")
     test = relationship("Test")

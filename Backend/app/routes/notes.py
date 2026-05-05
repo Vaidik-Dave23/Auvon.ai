@@ -29,19 +29,16 @@ def generate_notes(query: str, db: Session = Depends(get_db), user=Depends(get_c
 
     hash_key = generate_hash(query)
 
-    # 🔥 CACHE CHECK
     existing_note = db.query(Notes).filter(Notes.hash_key == hash_key).first()
 
     if existing_note:
-        # attach to user
         user_note = UserNotes(user_id=user.id, note_id=existing_note.id)
         db.add(user_note)
         db.commit()
-
         return {"source": "cache", "note": note_to_dict(existing_note)}
 
-    # 🤖 AI GENERATION
-    content = generate_ai_notes(query)
+    # Topic keyword — use standard notes generation
+    content = generate_ai_notes(query, is_pdf=False)
 
     new_note = Notes(
         title=query,
@@ -54,7 +51,6 @@ def generate_notes(query: str, db: Session = Depends(get_db), user=Depends(get_c
     db.commit()
     db.refresh(new_note)
 
-    # attach to user
     user_note = UserNotes(user_id=user.id, note_id=new_note.id)
     db.add(user_note)
     db.commit()
@@ -64,11 +60,8 @@ def generate_notes(query: str, db: Session = Depends(get_db), user=Depends(get_c
 @router.get("/my")
 def get_my_notes(db: Session = Depends(get_db), user=Depends(get_current_user)):
     user_notes = db.query(UserNotes).filter(UserNotes.user_id == user.id).all()
-
     note_ids = [un.note_id for un in user_notes]
-
     notes = db.query(Notes).filter(Notes.id.in_(note_ids)).all()
-
     return notes
 
 @router.post("/pdf")
@@ -76,7 +69,7 @@ async def generate_from_pdf(file: UploadFile = File(...), db: Session = Depends(
 
     content_bytes = await file.read()
 
-    # 🔑 hash for caching
+    # Hash the full content for caching
     hash_key = generate_hash(content_bytes.decode(errors="ignore")[:1000])
 
     existing_note = db.query(Notes).filter(Notes.hash_key == hash_key).first()
@@ -85,17 +78,16 @@ async def generate_from_pdf(file: UploadFile = File(...), db: Session = Depends(
         user_note = UserNotes(user_id=user.id, note_id=existing_note.id)
         db.add(user_note)
         db.commit()
-
         return {"source": "cache", "note": note_to_dict(existing_note)}
 
-    # 📄 extract text
+    # Extract ALL text from PDF (increased limit from 2000 to 8000 chars)
     pdf = fitz.open(stream=content_bytes, filetype="pdf")
     text = ""
     for page in pdf:
         text += page.get_text()
 
-    # 🤖 AI
-    summary = generate_ai_notes(text[:2000])  # limit
+    # Use is_pdf=True so the AI reads the actual document content
+    summary = generate_ai_notes(text[:8000], is_pdf=True)
 
     new_note = Notes(
         title=file.filename,

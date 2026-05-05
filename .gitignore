@@ -1,12 +1,52 @@
-# Backend
-backend/.env
-backend/__pycache__/
-backend/venv/
-
-# Frontend
-frontend/node_modules/
-frontend/dist/
-
-# General
+# ======================
+# 🔐 ENV FILES
+# ======================
 .env
+Backend/.env
+
+# ======================
+# 🐍 PYTHON (BACKEND)
+# ======================
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+Backend/.venv/
+venv/
+env/
+
+# ======================
+# 📦 NODE (FRONTEND)
+# ======================
+frontend/node_modules/
+node_modules/
+
+# Build output
+frontend/dist/
+dist/
+
+# ======================
+# 🧠 IDE / SYSTEM FILES
+# ======================
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ======================
+# 📁 TEMP / LOG FILES
+# ======================
+*.log
+*.sqlite3
+
+# ======================
+# 🧪 TEST FILES (optional)
+# ======================
+*.json
+
+# ======================
+# 🚀 OTHER
+# ======================
+coverage/

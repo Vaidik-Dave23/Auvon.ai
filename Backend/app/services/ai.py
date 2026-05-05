@@ -1,5 +1,6 @@
 import json
 import os
+import random
 import requests
 from fastapi import HTTPException
 from dotenv import load_dotenv
@@ -42,7 +43,6 @@ def ai(prompt: list[dict]) -> str:
 
 def _parse_json_response(raw: str, context: str) -> any:
     """Parse a JSON string returned by the AI, raising HTTPException on failure."""
-    # Strip accidental markdown code fences the model sometimes adds
     cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         return json.loads(cleaned)
@@ -94,45 +94,99 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
     return plan
 
 
-def generate_ai_notes(query: str) -> str:
-    """Returns structured study notes on the given topic."""
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "You are an expert academic tutor and technical writer. Your goal is to create world-class, "
-                "highly engaging, and beautifully formatted study notes. Use markdown formatting extensively "
-                "(headers, bullet points, bold text for keywords). Break down complex concepts into easy-to-understand "
-                "analogies. Ensure the tone is encouraging, clear, and highly educational."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Please generate comprehensive and structured study notes on the topic: '{query}'.\n\n"
-                "Format the response using Markdown and include the exact following sections:\n\n"
-                "## 📘 Overview & Context\n"
-                "Start with a high-level summary. Explain the topic simply, as if to a beginner, and provide context on why it is important.\n\n"
-                "## 🔑 Core Concepts & Definitions\n"
-                "Break down the fundamental ideas into digestible bullet points. Bold the key terms and provide clear definitions.\n\n"
-                "## 💡 Real-World Examples & Analogies\n"
-                "Provide at least 2 practical, real-world examples or relatable analogies that make the topic intuitive to grasp.\n\n"
-                "## ⚠️ Common Pitfalls & Misconceptions\n"
-                "Highlight what students usually get wrong about this topic. How can they avoid these mistakes?\n\n"
-                "## 🎯 Actionable Takeaways & Summary\n"
-                "Provide a quick, punchy summary of the most critical points to remember for an exam or practical application.\n\n"
-                "Make the notes visually appealing, easy to skim, and deeply educational."
-            ),
-        },
-    ]
+def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
+    """
+    Generate notes from either a topic keyword or actual PDF/document content.
+    When is_pdf=True, query contains the raw extracted text — we mine it deeply.
+    When is_pdf=False, query is a topic name — we generate comprehensive study notes.
+    """
+
+    if is_pdf:
+        # PDF / raw content path — extract real knowledge from the actual material
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert study notes creator. Your job is to read raw document content "
+                    "and produce dense, exam-ready study notes that capture the ACTUAL information "
+                    "in the document — not generic summaries about the topic. "
+                    "Every point must come from the document itself. "
+                    "Use markdown: ## headings, **bold** for key terms, `code` for commands/syntax, "
+                    "bullet points for lists, and tables where helpful."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    "Below is the content extracted from a document. "
+                    "Create thorough, exam-ready study notes from it.\n\n"
+                    "Follow this structure:\n\n"
+                    "## 📌 What This Document Covers\n"
+                    "1-2 sentences on the actual topic and purpose of THIS document.\n\n"
+                    "## 🔑 Key Concepts & Facts\n"
+                    "Extract every important concept, definition, rule, or fact directly from the text. "
+                    "Use bullet points. Bold the term, then explain it. "
+                    "Include specific details, numbers, commands, formulas — whatever the document contains.\n\n"
+                    "## 📝 Important Examples / Questions Covered\n"
+                    "List the most important examples, practice problems, or scenarios from the document. "
+                    "Show the actual example AND the solution/answer approach if present.\n\n"
+                    "## ⚡ Quick-Reference Cheatsheet\n"
+                    "Create a compact table or list of the most testable facts, commands, formulas, "
+                    "or rules — the things most likely to appear in an exam.\n\n"
+                    "## ⚠️ Tricky Parts & Common Mistakes\n"
+                    "Based on the document content, what are the edge cases, exceptions, or "
+                    "commonly confused concepts a student must know?\n\n"
+                    "## 🎯 Summary — What You Must Know\n"
+                    "5-8 bullet points of the absolute must-know takeaways from THIS document.\n\n"
+                    "---\n"
+                    "DOCUMENT CONTENT:\n\n"
+                    f"{query}"
+                ),
+            },
+        ]
+    else:
+        # Keyword/topic path — generate deep, comprehensive notes on the subject
+        prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "You are an expert academic tutor. Generate dense, exam-ready study notes. "
+                    "Be specific and technical — include actual facts, formulas, syntax, examples, "
+                    "and edge cases. Never be vague or generic. "
+                    "Use markdown: ## headings, **bold** for terms, `code` for syntax/commands, "
+                    "tables for comparisons, and bullet points for lists."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Generate comprehensive, exam-ready study notes on: **{query}**\n\n"
+                    "## 📘 Overview\n"
+                    "What is it, why does it matter, where is it used? Be specific.\n\n"
+                    "## 🔑 Core Concepts — Detailed\n"
+                    "For each key concept: define it precisely, give the syntax/formula if applicable, "
+                    "and give a concrete mini-example. Bold every term.\n\n"
+                    "## 💻 Practical Examples\n"
+                    "Give 3-5 worked examples with actual code/formulas/calculations shown step by step. "
+                    "Not pseudocode — real, runnable examples.\n\n"
+                    "## 📊 Comparisons & Edge Cases\n"
+                    "Compare similar concepts in a table (e.g. A vs B vs C). "
+                    "List edge cases and gotchas a student must know.\n\n"
+                    "## ⚡ Quick-Reference Cheatsheet\n"
+                    "The most testable facts, commands, or formulas in a compact list or table.\n\n"
+                    "## 🎯 Must-Know Summary\n"
+                    "5-8 bullet points — the things most likely to appear in an exam on this topic."
+                ),
+            },
+        ]
 
     return ai(prompt)
 
 
 def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
     """
-    Returns AI-generated MCQs on the topic.
-    Each item: { "question": str, "options": [str, str, str, str], "correct_answer": str }
+    Returns AI-generated MCQs on the topic with randomised correct answer positions
+    to prevent all answers clustering on one option.
     """
     prompt = [
         {
@@ -146,12 +200,14 @@ def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
             "role": "user",
             "content": (
                 f"Generate {num} {difficulty}-difficulty multiple choice questions about '{topic}'.\n"
-                "Each question must have exactly 4 options labelled 'Option A', 'Option B', "
-                "'Option C', 'Option D' and one correct answer.\n"
+                "Each question must have exactly 4 options and one correct answer.\n"
+                "IMPORTANT: The correct answer must be distributed randomly — "
+                "do NOT always put the correct answer in the same position.\n"
                 "Return a JSON array where each element has:\n"
                 '  "question": the question text (string)\n'
-                '  "options": ["Option A: ...", "Option B: ...", "Option C: ...", "Option D: ..."]\n'
-                '  "correct_answer": one of "Option A", "Option B", "Option C", "Option D"\n\n'
+                '  "options": ["text of option 1", "text of option 2", "text of option 3", "text of option 4"]\n'
+                '    (plain option text, no "Option A:" prefix)\n'
+                '  "correct_answer": the exact text of the correct option (must match one of the options exactly)\n\n'
                 "Return ONLY the JSON array."
             ),
         },
@@ -163,43 +219,95 @@ def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
     if not isinstance(questions, list) or len(questions) == 0:
         raise HTTPException(status_code=502, detail="AI returned no questions")
 
+    processed = []
     for q in questions:
         if not all(k in q for k in ("question", "options", "correct_answer")):
             raise HTTPException(status_code=502, detail="AI question is missing required fields")
         if len(q["options"]) != 4:
             raise HTTPException(status_code=502, detail="AI question does not have exactly 4 options")
-        q["question"] = str(q["question"])
-        q["options"] = [str(o) for o in q["options"]]
-        
-        # Ensure correct_answer contains the full text
-        short_ans = str(q["correct_answer"])
-        full_ans = next((opt for opt in q["options"] if opt.startswith(short_ans)), short_ans)
-        q["correct_answer"] = full_ans
 
-    return questions
+        question_text = str(q["question"])
+        options = [str(o) for o in q["options"]]
+        correct_text = str(q["correct_answer"])
+
+        # Find the correct option (flexible matching)
+        matched_correct = None
+        for opt in options:
+            if opt == correct_text or opt.startswith(correct_text) or correct_text.startswith(opt):
+                matched_correct = opt
+                break
+
+        if matched_correct is None:
+            # fallback: just use correct_text as-is if no match
+            matched_correct = correct_text
+
+        # --- KEY FIX: shuffle options so correct answer isn't always same position ---
+        random.shuffle(options)
+
+        # Ensure matched_correct is actually in shuffled options
+        if matched_correct not in options:
+            # Replace a random non-correct slot with the correct answer
+            options[random.randint(0, 3)] = matched_correct
+
+        # Label with A/B/C/D after shuffling
+        labelled_options = [f"Option {chr(65+i)}: {opt}" for i, opt in enumerate(options)]
+        correct_label = None
+        for i, opt in enumerate(options):
+            if opt == matched_correct:
+                correct_label = f"Option {chr(65+i)}: {opt}"
+                break
+
+        processed.append({
+            "question": question_text,
+            "options": labelled_options,
+            "correct_answer": correct_label or labelled_options[0],
+        })
+
+    return processed
 
 
-def generate_weak_topic_review(weak_topics: list[str]) -> str:
-    """Returns a personalised improvement suggestion for the student's weak topics."""
+def generate_weak_topic_review(weak_topics: list[str], score: int = None, total: int = None) -> str:
+    """
+    Returns a detailed, personalised improvement plan for the student's weak topics.
+    Much higher quality than before — specific, actionable, not generic.
+    """
     if not weak_topics:
-        return "You're doing great! No weak areas detected 🎉"
+        return (
+            "Excellent work! You answered every question correctly. "
+            "To push further, try increasing the difficulty level or exploring advanced subtopics."
+        )
 
-    unique_topics = list(set(weak_topics))
+    unique_topics = list(dict.fromkeys(weak_topics))  # deduplicated, order-preserving
+    score_context = ""
+    if score is not None and total is not None:
+        score_context = f"The student scored {score}% ({total - len(unique_topics)}/{total} correct). "
+
+    # Pick the single highest-priority topic to focus on
+    priority_topic = unique_topics[0]
+    other_topics = unique_topics[1:4]  # show at most 3 others
 
     prompt = [
         {
             "role": "system",
             "content": (
-                "You are a supportive academic coach. "
-                "Give encouraging, practical advice in 2-3 concise sentences."
+                "You are an expert academic coach who gives precise, actionable study advice. "
+                "Your feedback must be specific to the topics listed — never give generic advice. "
+                "Avoid phrases like 'keep practicing' or 'review the material'. "
+                "Instead name concrete techniques, resources, or mental models the student should use."
             ),
         },
         {
             "role": "user",
             "content": (
-                f"A student is struggling with these topics: {', '.join(unique_topics)}.\n"
-                "Give a short, specific improvement suggestion. "
-                "Mention which topic to prioritise first and one practical action they can take."
+                f"{score_context}"
+                f"The student got these questions wrong: {', '.join(unique_topics[:8])}.\n\n"
+                f"Their biggest gap appears to be around: '{priority_topic}'.\n\n"
+                "Write a focused 3-4 sentence improvement plan that:\n"
+                f"1. Explains WHY '{priority_topic}' is likely confusing (the typical misconception)\n"
+                "2. Gives ONE specific study technique or resource to fix it\n"
+                f"3. If there are other weak areas ({', '.join(other_topics) if other_topics else 'none'}), "
+                "briefly mention which to tackle next and why\n\n"
+                "Be direct, specific, and encouraging. No bullet points — write in plain paragraphs."
             ),
         },
     ]

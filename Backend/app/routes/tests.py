@@ -18,7 +18,7 @@ from app.models.user_answer import UserAnswer
 router = APIRouter(prefix="/tests", tags=["tests"])
 
 
-# 🔥 GENERATE TEST — specific POST, must be before /{test_id}
+# 🔥 GENERATE TEST
 @router.post("/generate", response_model=TestGenerateResponse)
 async def generate_test(
     topic: str = Form(None),
@@ -42,7 +42,7 @@ async def generate_test(
             content = text[:4000]
         else:
             content = content_bytes.decode("utf-8", errors="ignore")
-            
+
         if not test_topic:
             test_topic = file.filename
     else:
@@ -107,7 +107,7 @@ def get_tests(db: Session = Depends(get_db), user=Depends(get_current_user)):
     ]
 
 
-# 📊 SUBMIT TEST — specific POST, must be before /{test_id}
+# 📊 SUBMIT TEST
 @router.post("/submit", response_model=TestSubmitResponse)
 def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Depends(get_current_user)):
 
@@ -116,6 +116,13 @@ def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Dep
     correct = 0
     weak_topics = []
     review = []
+
+    # Delete previous answers for this test attempt (so we only keep latest)
+    db.query(UserAnswer).filter(
+        UserAnswer.user_id == user.id,
+        UserAnswer.test_id == data.test_id
+    ).delete()
+    db.commit()
 
     for q in questions:
         user_ans = data.answers.get(str(q.id))
@@ -149,7 +156,8 @@ def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Dep
     total = len(questions)
     score = int((correct / total) * 100) if total > 0 else 0
 
-    ai_feedback = generate_weak_topic_review(weak_topics)
+    # Generate fresh feedback and store it
+    ai_feedback = generate_weak_topic_review(weak_topics, score, total)
 
     existing = db.query(Test_Result).filter(
         Test_Result.user_id == user.id,
@@ -159,12 +167,14 @@ def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Dep
     if existing:
         existing.last_score = score
         existing.best_score = max(existing.best_score, score)
+        existing.last_feedback = ai_feedback
     else:
         result = Test_Result(
             user_id=user.id,
             test_id=data.test_id,
             best_score=score,
-            last_score=score
+            last_score=score,
+            last_feedback=ai_feedback
         )
         db.add(result)
 
@@ -174,16 +184,17 @@ def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Dep
         "score": score,
         "correct": correct,
         "total": total,
-        "weak_topics": weak_topics,
+        "weak_topics": list(set(weak_topics)),  # deduplicate
         "review": review,
         "ai_feedback": ai_feedback
     }
 
 
-# 📘 RESULT — specific GET, must be before /{test_id}
+# 📘 RESULT — uses stored feedback, no extra AI call
 @router.get("/result/{test_id}")
 def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
 
+    # Get the latest answers only (already deduplicated on submit)
     answers = db.query(UserAnswer).filter(
         UserAnswer.user_id == user.id,
         UserAnswer.test_id == test_id
@@ -196,7 +207,13 @@ def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_cur
     correct = sum(1 for a in answers if a.is_correct)
     score = int((correct / total) * 100) if total else 0
 
-    weak_topics = [a.question_text for a in answers if not a.is_correct]
+    # Deduplicate weak topics
+    seen = set()
+    weak_topics = []
+    for a in answers:
+        if not a.is_correct and a.question_text not in seen:
+            seen.add(a.question_text)
+            weak_topics.append(a.question_text)
 
     review = [
         {
@@ -208,7 +225,17 @@ def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_cur
         for a in answers
     ]
 
-    ai_feedback = generate_weak_topic_review(weak_topics)
+    # Use stored feedback — NO new AI call
+    result_record = db.query(Test_Result).filter(
+        Test_Result.user_id == user.id,
+        Test_Result.test_id == test_id
+    ).first()
+
+    ai_feedback = (
+        result_record.last_feedback
+        if result_record and result_record.last_feedback
+        else "Complete a test attempt to receive AI feedback."
+    )
 
     return {
         "score": score,
@@ -224,11 +251,10 @@ def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_cur
 @router.delete("/{test_id}")
 def delete_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     test = db.query(Test).filter(Test.id == test_id, Test.user_id == user.id).first()
-    
+
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    # Manually delete associated UserAnswers and Test_Result to avoid constraint errors
     db.query(UserAnswer).filter(UserAnswer.test_id == test_id).delete()
     db.query(Test_Result).filter(Test_Result.test_id == test_id).delete()
 
@@ -238,7 +264,7 @@ def delete_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_cu
     return {"message": "Test deleted successfully"}
 
 
-# 🧪 GET TEST — wildcard last, so it doesn't swallow routes above
+# 🧪 GET TEST
 @router.get("/{test_id}")
 def get_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
     questions = db.query(Question).filter(Question.test_id == test_id).all()
