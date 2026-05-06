@@ -27,7 +27,7 @@ database.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 origins = [
-    "http://localhost:5173",
+    "https://auvon-ai.vercel.app",
 ]
 
 app.add_middleware(
