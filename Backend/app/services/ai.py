@@ -59,25 +59,31 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
     Each item: { "week": int, "steps": [str, ...] }
     """
     prompt = [
-        {
-            "role": "system",
-            "content": (
-                "You are an expert learning coach. "
-                "Respond ONLY with a valid JSON array, no markdown, no extra text."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"Create a {weeks}-week actionable plan to achieve this goal: '{goal}'.\n"
-                "Return a JSON array where each element has:\n"
-                '  "week": week number (integer)\n'
-                '  "steps": array of 2-3 specific, practical tasks for that week (strings)\n'
-                "Example for 2 weeks:\n"
-                '[{"week":1,"steps":["Task A","Task B"]},{"week":2,"steps":["Task C","Task D"]}]'
-            ),
-        },
-    ]
+    {
+        "role": "system",
+        "content": (
+            "You are an elite learning coach who creates razor-sharp, highly specific learning plans. "
+            "Your plans are concrete, measurable, and immediately actionable — never vague or generic. "
+            "Respond ONLY with a valid JSON array. No markdown, no explanation, no extra text whatsoever."
+        ),
+    },
+    {
+        "role": "user",
+        "content": (
+            f"Create a plan with EXACTLY {weeks} week(s) — no more, no less — to achieve: '{goal}'.\n\n"
+            "Rules:\n"
+            f"- The JSON array MUST contain EXACTLY {weeks} element(s).\n"
+            "- Each week must build progressively on the previous one.\n"
+            "- Each step must be specific and immediately actionable (include tools, resources, durations, or metrics where possible).\n"
+            "- Avoid generic advice like 'study more' or 'practice daily' — be precise.\n\n"
+            "Return a JSON array where each element has:\n"
+            '  "week": week number as integer (1-indexed)\n'
+            '  "steps": array of exactly 3 specific, practical, measurable tasks (strings)\n\n'
+            f"Example format for {weeks} week(s):\n"
+            + str([{"week": i, "steps": ["Specific task with tool/metric", "Specific task with milestone", "Specific task with outcome"]} for i in range(1, weeks + 1)])
+        ),
+    },
+]
 
     raw = ai(prompt)
     plan = _parse_json_response(raw, "generate_plan")

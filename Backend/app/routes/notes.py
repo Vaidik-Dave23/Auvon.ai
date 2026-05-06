@@ -5,6 +5,7 @@ from app.models.notes import Notes, UserNotes
 from app.utils.hash import generate_hash
 from app.services.ai import generate_ai_notes
 from app.utils.dependencies import get_current_user
+from datetime import datetime
 import fitz
 
 def note_to_dict(note):
@@ -44,7 +45,8 @@ def generate_notes(query: str, db: Session = Depends(get_db), user=Depends(get_c
         title=query,
         content=content,
         hash_key=hash_key,
-        source="keyword"
+        source="keyword",
+        created_at=datetime.utcnow().isoformat()
     )
 
     db.add(new_note)
@@ -61,7 +63,7 @@ def generate_notes(query: str, db: Session = Depends(get_db), user=Depends(get_c
 def get_my_notes(db: Session = Depends(get_db), user=Depends(get_current_user)):
     user_notes = db.query(UserNotes).filter(UserNotes.user_id == user.id).all()
     note_ids = [un.note_id for un in user_notes]
-    notes = db.query(Notes).filter(Notes.id.in_(note_ids)).all()
+    notes = db.query(Notes).filter(Notes.id.in_(note_ids)).order_by(Notes.created_at.desc()).all()
     return notes
 
 @router.post("/pdf")
@@ -93,7 +95,8 @@ async def generate_from_pdf(file: UploadFile = File(...), db: Session = Depends(
         title=file.filename,
         content=summary,
         hash_key=hash_key,
-        source="pdf"
+        source="pdf",
+        created_at=datetime.utcnow().isoformat()
     )
 
     db.add(new_note)

@@ -97,7 +97,7 @@ function Dashboard() {
       {/* MAIN */}
       <div className="flex-1 flex flex-col gap-8 animate-fade-in">
         <header className="mb-2">
-          <h1 className="text-4xl font-bold text-textMain tracking-tight">Dashboard</h1>
+          <h1 className="text-4xl font-bold text-textMain tracking-tight">Learning Dashboard</h1>
           <p className="text-textMuted mt-1">Welcome back. Here's your progress.</p>
         </header>
 

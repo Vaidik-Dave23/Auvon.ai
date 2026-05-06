@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.utils.dependencies import get_current_user
+from datetime import datetime
 
 router = APIRouter()
 
@@ -14,7 +15,7 @@ def create_goal_ai(
     db: Session = Depends(get_db),
     user = Depends(get_current_user)
 ):
-    goal = Goal(title=title, user_id=user.id)
+    goal = Goal(title=title, user_id=user.id, created_at=datetime.utcnow().isoformat())
     db.add(goal)
     db.commit()
     db.refresh(goal)
@@ -37,7 +38,7 @@ def create_goal_ai(
 
 @router.get("/goals")
 def get_goals(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    goals = db.query(Goal).filter(Goal.user_id == user.id).all()
+    goals = db.query(Goal).filter(Goal.user_id == user.id).order_by(Goal.id.desc()).all()
 
     result = []
 
@@ -57,7 +58,8 @@ def get_goals(db: Session = Depends(get_db), user=Depends(get_current_user)):
         result.append({
             "id": goal.id,
             "title": goal.title,
-            "weeks": weeks
+            "weeks": weeks,
+            "created_at": goal.created_at
         })
 
     return result

@@ -10,6 +10,7 @@ class Goal(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'))
     title = Column(String)
+    created_at = Column(String)  # ISO format timestamp
     steps=relationship("Step", back_populates="goal", cascade="all, delete-orphan")
 
     user = relationship("User")

@@ -94,14 +94,15 @@ async def generate_test(
 # 📚 HISTORY
 @router.get("/")
 def get_tests(db: Session = Depends(get_db), user=Depends(get_current_user)):
-    results = db.query(Test_Result).filter(Test_Result.user_id == user.id).all()
+    results = db.query(Test_Result).filter(Test_Result.user_id == user.id).join(Test).order_by(Test.created_at.desc()).all()
 
     return [
         {
             "test_id": r.test_id,
             "topic": r.test.topic,
             "score": r.last_score,
-            "best_score": r.best_score
+            "best_score": r.best_score,
+            "created_at": r.test.created_at
         }
         for r in results
     ]

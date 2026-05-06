@@ -29,6 +29,8 @@ app = FastAPI()
 origins = [
     "https://auvon-ai.vercel.app",
     "https://auvon-be0imxvrg-vaidik-dave23s-projects.vercel.app",
+    "http://localhost:5174",
+
 ]
 
 app.add_middleware(

@@ -91,8 +91,8 @@ function Goals() {
       <div className="flex-1 animate-fade-in">
 
         <header className="mb-8">
-          <h1 className="text-4xl font-bold text-textMain tracking-tight mb-2">Goals</h1>
-          <p className="text-textMuted">Set your targets and let AI plan your learning journey.</p>
+          <h1 className="text-4xl font-bold text-textMain tracking-tight mb-2">Learning Goals</h1>
+          <p className="text-textMuted">Create personalized learning plans with AI guidance to achieve your academic goals.</p>
         </header>
 
         {/* CREATE GOAL */}
@@ -102,7 +102,7 @@ function Goals() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCreateGoal()}
-              placeholder="What do you want to learn? (e.g. Master FastAPI)"
+              placeholder="What subject or skill do you want to master?"
               className="w-full px-4 py-3 rounded-xl bg-cardHover border border-white/5 focus:border-accent/50 outline-none transition-colors text-textMain placeholder:text-textMuted/50"
             />
           </div>
@@ -115,7 +115,7 @@ function Goals() {
                 min="1"
                 max="12"
                 value={weeks}
-                onChange={(e) => setWeeks(e.target.value)}
+                onChange={(e) => setWeeks(parseInt(e.target.value) || 1)}
                 className="w-12 py-2 bg-transparent outline-none text-textMain font-semibold text-center"
               />
             </div>
@@ -140,7 +140,7 @@ function Goals() {
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                   </svg>
-                  Generate Plan
+                  Generate Study Plan
                 </>
               )}
             </button>

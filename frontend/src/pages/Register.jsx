@@ -15,16 +15,25 @@ function Register() {
     setLoading(true);
 
     try {
-      await api.post("/register", {
+      const res = await api.post("/register", {
         name,
         email,
         password,
       });
 
-      alert("Registered successfully 🎉");
-      navigate("/"); // back to login
+      // Auto-login with the token received from registration
+      if (res.data.access_token) {
+        localStorage.setItem("token", res.data.access_token);
+        navigate("/dashboard");
+      }
     } catch (err) {
-      alert(err.response?.data?.detail || "Registration failed");
+      const detail = err.response?.data?.detail;
+      const message = typeof detail === "string"
+        ? detail
+        : Array.isArray(detail)
+          ? detail.map((item) => item?.msg || JSON.stringify(item)).join(" \n")
+          : JSON.stringify(detail);
+      alert(message || "Registration failed");
     } finally {
       setLoading(false);
     }
@@ -39,9 +48,9 @@ function Register() {
       <div className="glass-panel border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-3xl p-10 w-full max-w-md text-textMain animate-fade-in relative z-10 mx-4">
         <div className="text-center mb-10">
           <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-accent to-accentHover mb-3 tracking-tight">
-            Join Auvon.AI
+            Start Your Learning Journey
           </h1>
-          <p className="text-textMuted font-medium">Start your accelerated learning journey today.</p>
+          <p className="text-textMuted font-medium">Join thousands of students using AI-powered learning tools.</p>
         </div>
 
         <form onSubmit={handleRegister} className="flex flex-col gap-5">

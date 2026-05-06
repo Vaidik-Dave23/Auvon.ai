@@ -1,25 +1,76 @@
 import { useState, useEffect } from "react";
 import Sidebar from "../components/Sidebar";
 import { useTheme } from "../context/ThemeContext";
+import api from "../api/axios";
 
 function Profile() {
   const { theme, toggleTheme } = useTheme();
   
-  // Mock user data for UI purposes. In a real app, fetch from backend.
   const [user, setUser] = useState({
-    name: "Vaidik Dave",
-    email: "davevaidik20@gmail.com",
-    joined: "May 2026"
+    name: "",
+    email: "",
+    created_at: null
   });
-
+  const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ ...user });
+  const [editForm, setEditForm] = useState({ name: "", email: "" });
+  const [saving, setSaving] = useState(false);
 
-  const handleSave = () => {
-    // Mock save
-    setUser(editForm);
+  // Fetch user profile data
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const response = await api.get("/me");
+        setUser(response.data);
+        setEditForm({ name: response.data.name, email: response.data.email });
+      } catch (error) {
+        console.error("Failed to fetch profile:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await api.put("/me", editForm);
+      setUser(response.data);
+      setIsEditing(false);
+    } catch (error) {
+      console.error("Failed to update profile:", error);
+      alert(error.response?.data?.detail || "Failed to update profile");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setEditForm({ name: user.name, email: user.email });
     setIsEditing(false);
   };
+
+  const formatJoinDate = (dateString) => {
+    if (!dateString) return "Unknown";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long'
+    });
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-base p-6 flex gap-6">
+        <Sidebar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-base p-6 flex gap-6">
@@ -57,16 +108,27 @@ function Profile() {
               ) : (
                 <div className="flex gap-2">
                   <button 
-                    onClick={() => setIsEditing(false)}
+                    onClick={handleCancel}
                     className="glass-button px-4 py-2 rounded-lg text-textMuted hover:text-textMain text-sm font-medium"
                   >
                     Cancel
                   </button>
                   <button 
                     onClick={handleSave}
-                    className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accentHover transition-colors shadow-lg"
+                    disabled={saving}
+                    className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-accentHover transition-colors shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                   >
-                    Save Changes
+                    {saving ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        Saving...
+                      </>
+                    ) : (
+                      "Save Changes"
+                    )}
                   </button>
                 </div>
               )}
@@ -104,7 +166,7 @@ function Profile() {
               {!isEditing && (
                 <div className="flex flex-col gap-2">
                   <label className="text-sm font-semibold text-textMuted uppercase tracking-wider">Member Since</label>
-                  <p className="text-lg font-medium text-textMain opacity-80">{user.joined}</p>
+                  <p className="text-lg font-medium text-textMain opacity-80">{formatJoinDate(user.created_at)}</p>
                 </div>
               )}
             </div>
