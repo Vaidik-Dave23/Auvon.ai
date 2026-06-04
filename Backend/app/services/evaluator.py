@@ -11,7 +11,7 @@ sys.modules['langchain_community.chat_models.vertexai'] = mock_vertex
 
 from datasets import Dataset
 from ragas import evaluate
-from ragas.metrics import faithfulness, answer_relevancy
+from ragas.metrics import faithfulness, answer_relevancy , context_precision
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from app.database import SessionLocal
 from app.models.ai_log import AILog
@@ -55,7 +55,7 @@ def evaluate_response_task(log_id: int, context: str, query: str, response: str)
         logger.info(f"Starting Ragas evaluation for log ID {log_id}...")
         result = evaluate(
             dataset=dataset,
-            metrics=[faithfulness, answer_relevancy],
+            metrics=[faithfulness, answer_relevancy , context_precision],
             llm=eval_llm,
             embeddings=eval_embeddings
         )
@@ -64,7 +64,7 @@ def evaluate_response_task(log_id: int, context: str, query: str, response: str)
         scores_dict = result.scores[0] if result.scores else {}
         faithfulness_score = scores_dict.get("faithfulness", 0.0)
         relevance_score = scores_dict.get("answer_relevancy", 0.0)
-
+        context_precision_score = scores_dict.get("context_precision", 0.0)
 
         # Ragas outputs nan if computation fails. Handle nan values.
         if math.isnan(faithfulness_score):
@@ -91,6 +91,7 @@ def evaluate_response_task(log_id: int, context: str, query: str, response: str)
             if log_record:
                 log_record.faithfulness = float(faithfulness_score)
                 log_record.relevance = float(relevance_score)
+                log_record.context_precision = float(context_precision_score)
                 log_record.context_recall = None  # Not evaluated in real-time without reference
                 log_record.evaluation_feedback = feedback
                 db.commit()
