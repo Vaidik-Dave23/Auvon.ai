@@ -13,6 +13,7 @@ import Notes from "./pages/Notes";
 import NoteReader from "./pages/NoteReader";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
+import VerifyEmail from "./pages/VerifyEmail";
 import Tests from "./pages/Tests";
 import TestAttempt from "./pages/TestAttempt";
 import TestResult from "./pages/TestResult";
@@ -28,6 +29,7 @@ function App() {
           <Route path="/about" element={<About />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/verify-email" element={<ProtectedRoute><VerifyEmail /></ProtectedRoute>} />
 
           {/* PROTECTED */}
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

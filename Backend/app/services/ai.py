@@ -2,14 +2,22 @@ import json
 import os
 import random
 import requests
-from fastapi import HTTPException
+from fastapi import HTTPException, BackgroundTasks
 from dotenv import load_dotenv
+import time
+from app.database import SessionLocal
+from app.models.ai_log import AILog
 
 load_dotenv()
 
-def ai(prompt: list[dict]) -> str:
-    """Core aipipe caller. Raises HTTPException on any failure."""
-
+def ai(
+    prompt: list[dict], 
+    endpoint_name: str = "custom", 
+    background_tasks: BackgroundTasks = None, 
+    evaluation_context: dict = None
+) -> str:
+    """Core aipipe caller. Measures latency, parses token usage, logs to DB, and runs quality evaluation."""
+    load_dotenv(override=True)
     api_key = os.getenv("AIPIPE_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="API_KEY environment variable is not set")
@@ -24,6 +32,7 @@ def ai(prompt: list[dict]) -> str:
         "messages": prompt,
     }
 
+    start_time = time.time()
     try:
         response = requests.post(url, headers=headers, json=data, timeout=30)
         response.raise_for_status()
@@ -32,13 +41,55 @@ def ai(prompt: list[dict]) -> str:
     except requests.ConnectionError:
         raise HTTPException(status_code=502, detail="Could not reach AI service")
     except requests.HTTPError as e:
-        status = e.response.status_code if e.response is not None else 500
-        raise HTTPException(status_code=status, detail=f"AI service returned an error: {e}")
+        raise HTTPException(status_code=502, detail=f"AI service returned an error: {e}")
+
+    latency = time.time() - start_time
 
     try:
-        return response.json()["choices"][0]["message"]["content"]
+        resp_json = response.json()
+        content = resp_json["choices"][0]["message"]["content"]
+        usage = resp_json.get("usage", {})
+        prompt_tokens = usage.get("prompt_tokens", 0)
+        completion_tokens = usage.get("completion_tokens", 0)
+        total_tokens = usage.get("total_tokens", 0)
     except (KeyError, IndexError, ValueError):
         raise HTTPException(status_code=502, detail="Unexpected response format from AI service")
+
+    # Save to database
+    db = SessionLocal()
+    log_id = None
+    try:
+        prompt_str = json.dumps(prompt, indent=2)
+        log_record = AILog(
+            endpoint=endpoint_name,
+            prompt=prompt_str,
+            response=content,
+            latency=latency,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens
+        )
+        db.add(log_record)
+        db.commit()
+        db.refresh(log_record)
+        log_id = log_record.id
+    except Exception as db_err:
+        print(f"Failed to log AI API call to DB: {db_err}")
+    finally:
+        db.close()
+
+    # Trigger LLM-as-a-judge quality evaluation in the background
+    if log_id and background_tasks and evaluation_context:
+        from app.services.evaluator import evaluate_response_task
+        background_tasks.add_task(
+            evaluate_response_task,
+            log_id,
+            evaluation_context.get("context", ""),
+            evaluation_context.get("query", ""),
+            content
+        )
+
+    return content
 
 
 def _parse_json_response(raw: str, context: str) -> any:
@@ -85,7 +136,7 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
     },
 ]
 
-    raw = ai(prompt)
+    raw = ai(prompt, endpoint_name="generate_plan")
     plan = _parse_json_response(raw, "generate_plan")
 
     if not isinstance(plan, list) or len(plan) == 0:
@@ -186,7 +237,7 @@ def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
             },
         ]
 
-    return ai(prompt)
+    return ai(prompt, endpoint_name="generate_notes")
 
 
 def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
@@ -219,7 +270,7 @@ def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
         },
     ]
 
-    raw = ai(prompt)
+    raw = ai(prompt, endpoint_name="generate_questions")
     questions = _parse_json_response(raw, "generate_questions")
 
     if not isinstance(questions, list) or len(questions) == 0:
@@ -318,4 +369,4 @@ def generate_weak_topic_review(weak_topics: list[str], score: int = None, total:
         },
     ]
 
-    return ai(prompt)
+    return ai(prompt, endpoint_name="generate_weak_topic_review")

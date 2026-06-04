@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.task import Task
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_verified_user
 
 router = APIRouter()
 
 @router.get("/stats")
-def get_stats(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_stats(db: Session = Depends(get_db), user=Depends(get_verified_user)):
 
     tasks = db.query(Task).filter(Task.user_id == user.id).all()
 

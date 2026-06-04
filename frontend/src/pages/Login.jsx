@@ -21,8 +21,13 @@ function Login() {
 
             // token save
             localStorage.setItem("token", res.data.access_token);
+            sessionStorage.setItem("is_verified", res.data.is_verified ? "true" : "false");
 
-            navigate("/dashboard");
+            if (res.data.is_verified) {
+                navigate("/dashboard");
+            } else {
+                navigate("/verify-email");
+            }
         } catch (err) {
             alert(err.response?.data?.detail || "Login failed");
         } finally {

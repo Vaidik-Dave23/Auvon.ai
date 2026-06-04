@@ -3,7 +3,7 @@ from app.services.ai import generate_plan
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_verified_user
 from datetime import datetime
 
 router = APIRouter()
@@ -13,7 +13,7 @@ def create_goal_ai(
     title: str,
     weeks: int,
     db: Session = Depends(get_db),
-    user = Depends(get_current_user)
+    user = Depends(get_verified_user)
 ):
     goal = Goal(title=title, user_id=user.id, created_at=datetime.utcnow().isoformat())
     db.add(goal)
@@ -37,7 +37,7 @@ def create_goal_ai(
     return {"message": "Goal created with AI plan"}
 
 @router.get("/goals")
-def get_goals(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_goals(db: Session = Depends(get_db), user=Depends(get_verified_user)):
     goals = db.query(Goal).filter(Goal.user_id == user.id).order_by(Goal.id.desc()).all()
 
     result = []
@@ -78,7 +78,7 @@ def toggle_step(step_id: int, db: Session = Depends(get_db)):
 def delete_goal(
     goal_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(get_verified_user)
 ):
     goal = db.query(Goal).filter(
         Goal.id == goal_id,

@@ -24,7 +24,8 @@ function Register() {
       // Auto-login with the token received from registration
       if (res.data.access_token) {
         localStorage.setItem("token", res.data.access_token);
-        navigate("/dashboard");
+        sessionStorage.setItem("is_verified", "false");
+        navigate("/verify-email");
       }
     } catch (err) {
       const detail = err.response?.data?.detail;
@@ -34,6 +35,10 @@ function Register() {
           ? detail.map((item) => item?.msg || JSON.stringify(item)).join(" \n")
           : JSON.stringify(detail);
       alert(message || "Registration failed");
+      
+      if (detail === "Email already registered and verified") {
+        navigate("/login");
+      }
     } finally {
       setLoading(false);
     }

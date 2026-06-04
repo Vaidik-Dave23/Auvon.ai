@@ -14,4 +14,21 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export default api;
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (
+      error.response &&
+      error.response.status === 403 &&
+      error.response.data?.detail === "Email not verified"
+    ) {
+      sessionStorage.setItem("is_verified", "false");
+      if (!window.location.pathname.startsWith("/verify-email")) {
+        window.location.href = "/verify-email";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+export default api;

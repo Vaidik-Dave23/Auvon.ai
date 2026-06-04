@@ -12,7 +12,7 @@ from app.schemas.test import (
     QuestionOut
 )
 from app.services.ai import generate_questions, generate_weak_topic_review
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_verified_user
 from app.models.user_answer import UserAnswer
 
 router = APIRouter(prefix="/tests", tags=["tests"])
@@ -26,7 +26,7 @@ async def generate_test(
     num_questions: int = Form(5),
     file: UploadFile = File(None),
     db: Session = Depends(get_db),
-    user=Depends(get_current_user)
+    user=Depends(get_verified_user)
 ):
     content = ""
     test_topic = topic
@@ -93,7 +93,7 @@ async def generate_test(
 
 # 📚 HISTORY
 @router.get("/")
-def get_tests(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_tests(db: Session = Depends(get_db), user=Depends(get_verified_user)):
     results = db.query(Test_Result).filter(Test_Result.user_id == user.id).join(Test).order_by(Test.created_at.desc()).all()
 
     return [
@@ -110,7 +110,7 @@ def get_tests(db: Session = Depends(get_db), user=Depends(get_current_user)):
 
 # 📊 SUBMIT TEST
 @router.post("/submit", response_model=TestSubmitResponse)
-def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Depends(get_verified_user)):
 
     questions = db.query(Question).filter(Question.test_id == data.test_id).all()
 
@@ -193,7 +193,7 @@ def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Dep
 
 # 📘 RESULT — uses stored feedback, no extra AI call
 @router.get("/result/{test_id}")
-def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_verified_user)):
 
     # Get the latest answers only (already deduplicated on submit)
     answers = db.query(UserAnswer).filter(
@@ -250,7 +250,7 @@ def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_cur
 
 # 🗑️ DELETE TEST
 @router.delete("/{test_id}")
-def delete_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def delete_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_verified_user)):
     test = db.query(Test).filter(Test.id == test_id, Test.user_id == user.id).first()
 
     if not test:
@@ -267,7 +267,7 @@ def delete_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_cu
 
 # 🧪 GET TEST
 @router.get("/{test_id}")
-def get_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_verified_user)):
     questions = db.query(Question).filter(Question.test_id == test_id).all()
 
     if not questions:

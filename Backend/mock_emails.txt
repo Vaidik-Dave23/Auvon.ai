@@ -1,0 +1,161 @@
+========================================
+MOCK EMAIL SENT TO: verify_test_user@example.com
+SUBJECT: Verify Your Auvon.AI Account
+CONTENT:
+
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0f0f13; color: #ffffff; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a24; padding: 30px; border-radius: 12px; border: 1px solid #2d2d3d;">
+                <h1 style="color: #8b5cf6; text-align: center;">Auvon.AI ✨</h1>
+                <p>Hello Verification Test,</p>
+                <p>Thank you for registering on Auvon.AI. Please use the following 6-digit verification code to confirm your email address:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #8b5cf6; padding: 10px 20px; background-color: #0f0f13; border-radius: 8px; border: 1px solid #3c3c52;">547506</span>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you did not sign up for Auvon.AI, you can ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #2d2d3d; margin: 30px 0;" />
+                <p style="font-size: 12px; color: #71717a; text-align: center;">Auvon.AI - Your intelligent learning companion.</p>
+            </div>
+        </body>
+    </html>
+    
+========================================
+========================================
+MOCK EMAIL SENT TO: vaidikdave236@email.com
+SUBJECT: Verify Your Auvon.AI Account
+CONTENT:
+
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0f0f13; color: #ffffff; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a24; padding: 30px; border-radius: 12px; border: 1px solid #2d2d3d;">
+                <h1 style="color: #8b5cf6; text-align: center;">Auvon.AI ✨</h1>
+                <p>Hello Vaidik,</p>
+                <p>Thank you for registering on Auvon.AI. Please use the following 6-digit verification code to confirm your email address:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #8b5cf6; padding: 10px 20px; background-color: #0f0f13; border-radius: 8px; border: 1px solid #3c3c52;">061674</span>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you did not sign up for Auvon.AI, you can ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #2d2d3d; margin: 30px 0;" />
+                <p style="font-size: 12px; color: #71717a; text-align: center;">Auvon.AI - Your intelligent learning companion.</p>
+            </div>
+        </body>
+    </html>
+    
+========================================
+========================================
+MOCK EMAIL SENT TO: vaidikdave236@gmail.com
+SUBJECT: Verify Your Auvon.AI Account
+CONTENT:
+
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0f0f13; color: #ffffff; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a24; padding: 30px; border-radius: 12px; border: 1px solid #2d2d3d;">
+                <h1 style="color: #8b5cf6; text-align: center;">Auvon.AI ✨</h1>
+                <p>Hello Vaidik Dave,</p>
+                <p>Thank you for registering on Auvon.AI. Please use the following 6-digit verification code to confirm your email address:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #8b5cf6; padding: 10px 20px; background-color: #0f0f13; border-radius: 8px; border: 1px solid #3c3c52;">270124</span>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you did not sign up for Auvon.AI, you can ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #2d2d3d; margin: 30px 0;" />
+                <p style="font-size: 12px; color: #71717a; text-align: center;">Auvon.AI - Your intelligent learning companion.</p>
+            </div>
+        </body>
+    </html>
+    
+========================================
+========================================
+MOCK EMAIL SENT TO: vaidikdave236@gmail.com
+SUBJECT: Verify Your Auvon.AI Account
+CONTENT:
+
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0f0f13; color: #ffffff; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a24; padding: 30px; border-radius: 12px; border: 1px solid #2d2d3d;">
+                <h1 style="color: #8b5cf6; text-align: center;">Auvon.AI ✨</h1>
+                <p>Hello Vaidik Dave,</p>
+                <p>Thank you for registering on Auvon.AI. Please use the following 6-digit verification code to confirm your email address:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #8b5cf6; padding: 10px 20px; background-color: #0f0f13; border-radius: 8px; border: 1px solid #3c3c52;">112459</span>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you did not sign up for Auvon.AI, you can ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #2d2d3d; margin: 30px 0;" />
+                <p style="font-size: 12px; color: #71717a; text-align: center;">Auvon.AI - Your intelligent learning companion.</p>
+            </div>
+        </body>
+    </html>
+    
+========================================
+========================================
+MOCK EMAIL SENT TO: vaidikdave236@gmail.com
+SUBJECT: Verify Your Auvon.AI Account
+CONTENT:
+
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0f0f13; color: #ffffff; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a24; padding: 30px; border-radius: 12px; border: 1px solid #2d2d3d;">
+                <h1 style="color: #8b5cf6; text-align: center;">Auvon.AI ✨</h1>
+                <p>Hello Vaidik Dave,</p>
+                <p>Thank you for registering on Auvon.AI. Please use the following 6-digit verification code to confirm your email address:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #8b5cf6; padding: 10px 20px; background-color: #0f0f13; border-radius: 8px; border: 1px solid #3c3c52;">974388</span>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you did not sign up for Auvon.AI, you can ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #2d2d3d; margin: 30px 0;" />
+                <p style="font-size: 12px; color: #71717a; text-align: center;">Auvon.AI - Your intelligent learning companion.</p>
+            </div>
+        </body>
+    </html>
+    
+========================================
+========================================
+MOCK EMAIL SENT TO: vaidikdave236@gmail.com
+SUBJECT: Verify Your Auvon.AI Account
+CONTENT:
+
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0f0f13; color: #ffffff; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a24; padding: 30px; border-radius: 12px; border: 1px solid #2d2d3d;">
+                <h1 style="color: #8b5cf6; text-align: center;">Auvon.AI ✨</h1>
+                <p>Hello Vaidik Dave,</p>
+                <p>Thank you for registering on Auvon.AI. Please use the following 6-digit verification code to confirm your email address:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #8b5cf6; padding: 10px 20px; background-color: #0f0f13; border-radius: 8px; border: 1px solid #3c3c52;">629217</span>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you did not sign up for Auvon.AI, you can ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #2d2d3d; margin: 30px 0;" />
+                <p style="font-size: 12px; color: #71717a; text-align: center;">Auvon.AI - Your intelligent learning companion.</p>
+            </div>
+        </body>
+    </html>
+    
+========================================
+========================================
+MOCK EMAIL SENT TO: test_verify_user_final@example.com
+SUBJECT: Verify Your Auvon.AI Account
+CONTENT:
+
+    <html>
+        <body style="font-family: Arial, sans-serif; background-color: #0f0f13; color: #ffffff; padding: 20px;">
+            <div style="max-width: 600px; margin: 0 auto; background-color: #1a1a24; padding: 30px; border-radius: 12px; border: 1px solid #2d2d3d;">
+                <h1 style="color: #8b5cf6; text-align: center;">Auvon.AI ✨</h1>
+                <p>Hello Verify Test User,</p>
+                <p>Thank you for registering on Auvon.AI. Please use the following 6-digit verification code to confirm your email address:</p>
+                <div style="text-align: center; margin: 30px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #8b5cf6; padding: 10px 20px; background-color: #0f0f13; border-radius: 8px; border: 1px solid #3c3c52;">559708</span>
+                </div>
+                <p>This code will expire in 15 minutes.</p>
+                <p>If you did not sign up for Auvon.AI, you can ignore this email.</p>
+                <hr style="border: none; border-top: 1px solid #2d2d3d; margin: 30px 0;" />
+                <p style="font-size: 12px; color: #71717a; text-align: center;">Auvon.AI - Your intelligent learning companion.</p>
+            </div>
+        </body>
+    </html>
+    
+========================================

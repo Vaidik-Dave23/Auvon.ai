@@ -3,13 +3,13 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.goal import Goal
 from app.models.task import Task
-from app.utils.dependencies import get_current_user
+from app.utils.dependencies import get_verified_user
 
 router = APIRouter()
 
 
 @router.get("/progress/goals")
-def get_goal_progress(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def get_goal_progress(db: Session = Depends(get_db), user=Depends(get_verified_user)):
     
     goals = db.query(Goal).filter(Goal.user_id == user.id).all()
 
@@ -30,7 +30,7 @@ def get_goal_progress(db: Session = Depends(get_db), user=Depends(get_current_us
     return result
 
 @router.get("/progress/daily")
-def daily_progress(db: Session = Depends(get_db), user=Depends(get_current_user)):
+def daily_progress(db: Session = Depends(get_db), user=Depends(get_verified_user)):
 
     tasks = db.query(Task).filter(Task.user_id == user.id).all()
 

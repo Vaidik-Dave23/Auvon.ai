@@ -18,6 +18,7 @@ class UserOut(BaseModel):
     name: str
     email: EmailStr
     created_at: datetime
+    is_verified: bool
 
     class Config:
         from_attributes = True   
@@ -29,3 +30,6 @@ class UserUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class VerifyEmailRequest(BaseModel):
+    code: str

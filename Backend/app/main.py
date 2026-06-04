@@ -10,6 +10,8 @@ from app.models.goal import Step
 from app.models.progress import Progress
 from app.models.test import Test, Question
 from app.models.results import Test_Result
+from app.models.ai_log import AILog
+from app.models.chunk import DocumentChunk
 
 from app.routes import auth
 from app.routes import notes
@@ -25,11 +27,22 @@ from fastapi.middleware.cors import CORSMiddleware
 # Create tables on startup
 database.Base.metadata.create_all(bind=engine)
 
+# Dynamically add columns if they don't exist
+from sqlalchemy import text
+with engine.connect() as conn:
+    try:
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE NOT NULL;"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code VARCHAR;"))
+        conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires_at TIMESTAMP;"))
+        conn.commit()
+    except Exception as e:
+        print(f"Database migration note: {e}")
+
 app = FastAPI()
 origins = [
     "https://auvon-ai.vercel.app",
     "https://auvon-be0imxvrg-vaidik-dave23s-projects.vercel.app",
-    "http://localhost:5174",
+    "http://localhost:5173",
 
 ]
 
