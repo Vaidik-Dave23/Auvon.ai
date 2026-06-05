@@ -12,54 +12,50 @@ router = APIRouter()
 
 @router.post("/register")
 def register(user: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    # NOTE:
+    # Email verification is temporarily disabled in the public deployment.
+    # The verification system remains implemented and can be re-enabled
+    # once a verified sending domain is configured with Resend.
+
     db_user = db.query(User).filter(User.email == user.email).first()
+    
     if db_user:
-        if not db_user.is_verified:
-            # Resend OTP and redirect to verification
-            otp_code = generate_otp()
-            otp_expiry = datetime.utcnow() + timedelta(minutes=15)
-            db_user.verification_code = otp_code
-            db_user.verification_code_expires_at = otp_expiry
-            db.commit()
-            
-            # Send verification email in background
-            send_verification_email(background_tasks, db_user.email, db_user.name, otp_code)
-            
-            access_token = create_access_token(data={"sub": db_user.email, "id": db_user.id})
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "is_verified": False,
-                "message": "Verification code resent. Please verify your email."
-            }
-        else:
-            raise HTTPException(status_code=400, detail="Email already registered and verified")
+        raise HTTPException(
+            status_code=400,
+            detail="Email already registered"
+        )
         
     hashed_password = hash_password(user.password)
-    otp_code = generate_otp()
-    otp_expiry = datetime.utcnow() + timedelta(minutes=15)
     
+    # EMAIL VERIFICATION TEMPORARILY DISABLED
+    # Re-enable when Resend domain verification is configured
     new_user = User(
         name=user.name,
         email=user.email,
         password=hashed_password,
-        is_verified=False,
-        verification_code=otp_code,
-        verification_code_expires_at=otp_expiry
+        is_verified=True,
+        verification_code=None,
+        verification_code_expires_at=None
     )
+    
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     
-    # Send verification email in background
-    send_verification_email(background_tasks, new_user.email, new_user.name, otp_code)
+    # EMAIL VERIFICATION TEMPORARILY DISABLED
+    # send_verification_email(
+    #     background_tasks,
+    #     new_user.email,
+    #     new_user.name,
+    #     otp_code
+    # )
     
     access_token = create_access_token(data={"sub": new_user.email, "id": new_user.id})
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "is_verified": False,
-        "message": "User registered successfully. Verification email sent."
+        "is_verified": True,
+        "message": "User registered successfully."
     }
 
 @router.post("/login")

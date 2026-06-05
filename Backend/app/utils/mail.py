@@ -57,7 +57,10 @@ def send_email_sync(to_email: str, subject: str, html_content: str):
             timeout=30,
         )
 
-        response.raise_for_status()
+        if response.status_code >= 400:
+            logger.error(f"Resend Status: {response.status_code}")
+            logger.error(f"Resend Response: {response.text}")
+            raise Exception(response.text)
 
         logger.info(f"Email successfully sent to {to_email}")
 
