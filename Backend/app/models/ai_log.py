@@ -17,7 +17,7 @@ class AILog(Base):
     # Evaluation scores (Ragas metrics)
     faithfulness = Column(Float, nullable=True)
     relevance = Column(Float, nullable=True)
-    context_recall = Column(Float, nullable=True)
+  
     evaluation_feedback = Column(Text, nullable=True)
     
     created_at = Column(DateTime, default=datetime.utcnow)
