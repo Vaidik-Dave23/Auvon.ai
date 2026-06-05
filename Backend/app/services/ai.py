@@ -34,7 +34,7 @@ def ai(
 
     start_time = time.time()
     try:
-        response = requests.post(url, headers=headers, json=data, timeout=30)
+        response = requests.post(url, headers=headers, json=data, timeout=90)
         response.raise_for_status()
     except requests.Timeout:
         raise HTTPException(status_code=504, detail="AI service timed out")
