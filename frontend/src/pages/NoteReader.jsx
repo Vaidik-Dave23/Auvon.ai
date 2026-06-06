@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import api from "../api/axios";
+import ReactMarkdown from "react-markdown";
+import rehypeKatex from "rehype-katex";
+import remarkMath from "remark-math";
+import "katex/dist/katex.min.css";
 
 function NoteReader() {
   const location = useLocation();
@@ -83,8 +87,8 @@ function NoteReader() {
       <div className="flex-1 animate-fade-in flex flex-col">
         {/* Header */}
         <div className="w-full flex justify-between items-center mb-8 pt-4">
-          <button 
-            onClick={() => navigate("/notes")} 
+          <button
+            onClick={() => navigate("/notes")}
             className="flex items-center gap-2 text-textMuted hover:text-accent transition-colors font-medium"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
@@ -92,8 +96,8 @@ function NoteReader() {
             </svg>
             Back to Library
           </button>
-          
-          <button 
+
+          <button
             onClick={() => {
               navigator.clipboard.writeText(note.content);
               alert("Copied to clipboard!");
@@ -109,30 +113,33 @@ function NoteReader() {
 
         {/* Split Screen Container */}
         <div className="flex-1 flex flex-col lg:flex-row gap-6 items-stretch">
-          
+
           {/* LEFT: Study Notes Content */}
           <div className="w-full lg:w-3/5 glass-panel p-8 md:p-12 rounded-3xl border-white/5 shadow-2xl relative overflow-y-auto max-h-[calc(100vh-140px)]">
             <div className="absolute top-0 left-10 right-10 h-1 bg-gradient-to-r from-transparent via-accent to-transparent opacity-50" />
-            
+
             <h1 className="text-3xl md:text-4xl font-bold text-textMain mb-10 leading-tight">
               {note.title}
             </h1>
 
             <div className="prose prose-invert max-w-none text-textMain/90 text-lg leading-relaxed">
-              {note.content.split('\n').map((paragraph, idx) => {
-                if (paragraph.startsWith('### ')) {
-                  return <h3 key={idx} className="text-2xl font-bold mt-8 mb-4 text-accent">{paragraph.replace('### ', '')}</h3>;
-                } else if (paragraph.startsWith('## ')) {
-                  return <h2 key={idx} className="text-3xl font-bold mt-10 mb-5 text-accentHover">{paragraph.replace('## ', '')}</h2>;
-                } else if (paragraph.startsWith('# ')) {
-                  return <h1 key={idx} className="text-4xl font-extrabold mt-12 mb-6 text-textMain">{paragraph.replace('# ', '')}</h1>;
-                } else if (paragraph.startsWith('- ') || paragraph.startsWith('* ')) {
-                  return <li key={idx} className="ml-6 mb-2">{paragraph.substring(2)}</li>;
-                } else if (paragraph.trim() === '') {
-                  return <br key={idx} />;
-                }
-                return <p key={idx} className="mb-4">{paragraph}</p>;
-              })}
+              <ReactMarkdown
+                remarkPlugins={[remarkMath]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  h1: ({ children }) => <h1 className="text-4xl font-extrabold mt-12 mb-6 text-textMain">{children}</h1>,
+                  h2: ({ children }) => <h2 className="text-3xl font-bold mt-10 mb-5 text-accentHover">{children}</h2>,
+                  h3: ({ children }) => <h3 className="text-2xl font-bold mt-8 mb-4 text-accent">{children}</h3>,
+                  p: ({ children }) => <p className="mb-4">{children}</p>,
+                  li: ({ children }) => <li className="ml-6 mb-2">{children}</li>,
+                  code: ({ inline, children }) =>
+                    inline
+                      ? <code className="bg-white/10 text-accent px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
+                      : <pre className="bg-white/5 border border-white/10 rounded-xl p-4 overflow-x-auto text-sm font-mono my-4"><code>{children}</code></pre>,
+                }}
+              >
+                {note.content}
+              </ReactMarkdown>
             </div>
           </div>
 
@@ -159,14 +166,13 @@ function NoteReader() {
               ) : (
                 chatMessages.map((msg, idx) => (
                   <div key={idx} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"} w-full`}>
-                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${
-                      msg.role === "user" 
-                        ? "bg-accent text-white rounded-br-none shadow-[0_4px_15px_rgba(139,92,246,0.15)]" 
-                        : "bg-cardHover border border-white/5 text-textMain rounded-bl-none"
-                    }`}>
+                    <div className={`max-w-[85%] p-4 rounded-2xl text-sm leading-relaxed ${msg.role === "user"
+                      ? "bg-accent text-white rounded-br-none shadow-[0_4px_15px_rgba(139,92,246,0.15)]"
+                      : "bg-cardHover border border-white/5 text-textMain rounded-bl-none"
+                      }`}>
                       {msg.text}
                     </div>
-                    
+
                     {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
                       <div className="mt-2 pl-3 border-l-2 border-accent/20 space-y-1 w-[85%]">
                         <p className="text-[10px] text-accent/80 font-bold uppercase tracking-wider">Retrieved Context:</p>
@@ -206,11 +212,10 @@ function NoteReader() {
               <button
                 type="submit"
                 disabled={chatLoading || !chatInput.trim()}
-                className={`p-3 rounded-xl flex items-center justify-center text-white transition-all ${
-                  chatLoading || !chatInput.trim()
-                    ? "bg-cardHover text-textMuted cursor-not-allowed border border-white/5"
-                    : "bg-accent hover:bg-accentHover hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(139,92,246,0.25)]"
-                }`}
+                className={`p-3 rounded-xl flex items-center justify-center text-white transition-all ${chatLoading || !chatInput.trim()
+                  ? "bg-cardHover text-textMuted cursor-not-allowed border border-white/5"
+                  : "bg-accent hover:bg-accentHover hover:scale-105 active:scale-95 shadow-[0_0_15px_rgba(139,92,246,0.25)]"
+                  }`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

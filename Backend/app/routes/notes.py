@@ -10,16 +10,56 @@ import fitz
 import math
 from app.models.chunk import DocumentChunk
 from app.utils.embeddings import get_embedding
+import re
 
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 150) -> list[str]:
-    chunks = []
+
+def chunk_text(text: str, max_chunk_size: int = 800, overlap: int = 150) -> list[str]:
+    """
+    Splits text semantically by paragraphs and sentences, falling back to 
+    character counts only when natural boundaries exceed the max size.
+    """
     if not text:
-        return chunks
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunks.append(text[start:end])
-        start += chunk_size - overlap
+        return []
+
+    # Split text by double newlines to isolate paragraphs
+    paragraphs = re.split(r'\n\n+', text)
+    chunks = []
+    current_chunk = ""
+
+    for para in paragraphs:
+        para = para.strip()
+        if not para:
+            continue
+
+        # If adding this paragraph exceeds the limit, process it carefully
+        if len(current_chunk) + len(para) > max_chunk_size:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+                # Retain overlap from the end of the previous chunk
+                current_chunk = current_chunk[-overlap:] if overlap > 0 else ""
+
+            # Split the large paragraph into sentences
+            sentences = re.split(r'(?<=[.!?])\s+', para)
+            for sentence in sentences:
+                if not sentence.strip():
+                    continue
+                
+                # If adding the sentence exceeds the max size, bank the chunk
+                if len(current_chunk) + len(sentence) > max_chunk_size and current_chunk:
+                    chunks.append(current_chunk.strip())
+                    current_chunk = current_chunk[-overlap:] if overlap > 0 else ""
+                
+                # Append sentence to current chunk
+                separator = " " if current_chunk and not current_chunk.endswith(" ") else ""
+                current_chunk += separator + sentence
+        else:
+            # Paragraph fits, add it
+            separator = "\n\n" if current_chunk else ""
+            current_chunk += separator + para
+
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+
     return chunks
 
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
@@ -252,4 +292,4 @@ def query_note(
     return {
         "answer": answer,
         "sources": [text for score, text in top_chunks]
-    }
+    }

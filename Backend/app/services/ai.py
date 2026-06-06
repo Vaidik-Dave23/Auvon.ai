@@ -16,39 +16,77 @@ def ai(
     background_tasks: BackgroundTasks = None, 
     evaluation_context: dict = None
 ) -> str:
-    """Core aipipe caller. Measures latency, parses token usage, logs to DB, and runs quality evaluation."""
+    """Core aipipe caller with Gemini fallback."""
     load_dotenv(override=True)
     api_key = os.getenv("AIPIPE_API_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="API_KEY environment variable is not set")
+    gemini_key = os.getenv("GEMINI_API_KEY")
 
-    url = "https://aipipe.org/openrouter/v1/chat/completions"
-    headers = {
+    # --- PRIMARY PROVIDER SETUP (AIPipe / OpenRouter) ---
+    primary_url = "https://aipipe.org/openrouter/v1/chat/completions"
+    primary_headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    data = {
-        "model": "openai/gpt-4.1-nano",
+    primary_data = {
+        "model": "openai/gpt-4o-mini", 
         "messages": prompt,
     }
 
     start_time = time.time()
-    try:
-        response = requests.post(url, headers=headers, json=data, timeout=90)
-        response.raise_for_status()
-    except requests.Timeout:
-        raise HTTPException(status_code=504, detail="AI service timed out")
-    except requests.ConnectionError:
-        raise HTTPException(status_code=502, detail="Could not reach AI service")
-    except requests.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"AI service returned an error: {e}")
-
-    latency = time.time() - start_time
+    response_json = None
+    latency = 0
 
     try:
-        resp_json = response.json()
-        content = resp_json["choices"][0]["message"]["content"]
-        usage = resp_json.get("usage", {})
+        # Attempt Primary AI
+        if not api_key:
+            raise ValueError("No AIPIPE_API_KEY found")
+            
+        response = requests.post(primary_url, headers=primary_headers, json=primary_data, timeout=90)
+        
+        # If it's a 402 or 502, force an exception to trigger the fallback
+        if response.status_code != 200:
+            print(f"🔥 Primary AI Error: {response.status_code} - {response.text}")
+            response.raise_for_status()
+            
+        response_json = response.json()
+        latency = time.time() - start_time
+        used_model = "primary"
+
+    except Exception as e:
+        print(f"⚠️ Primary AI failed ({e}). Attempting Gemini Fail-Safe...")
+        
+        # --- FALLBACK SETUP (Gemini OpenAI-Compatible Endpoint) ---
+        if not gemini_key:
+            raise HTTPException(status_code=502, detail="Primary AI failed and no GEMINI_API_KEY found.")
+
+        gemini_url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        gemini_headers = {
+            "Authorization": f"Bearer {gemini_key}",
+            "Content-Type": "application/json",
+        }
+        gemini_data = {
+            "model": "gemini-3.5-flash", # Fast, reliable, large context window
+            "messages": prompt,
+        }
+
+        gemini_start = time.time()
+        try:
+            g_response = requests.post(gemini_url, headers=gemini_headers, json=gemini_data, timeout=90)
+            if g_response.status_code != 200:
+                print(f"🔥 Gemini Fallback Error: {g_response.status_code} - {g_response.text}")
+                g_response.raise_for_status()
+                
+            response_json = g_response.json()
+            latency = time.time() - gemini_start
+            used_model = "gemini-fallback"
+            
+        except Exception as backup_e:
+             raise HTTPException(status_code=502, detail=f"Both primary and backup AIs failed. Last error: {backup_e}")
+
+    # --- PARSING AND LOGGING (Works for both!) ---
+    try:
+        content = response_json["choices"][0]["message"]["content"]
+        usage = response_json.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
         total_tokens = usage.get("total_tokens", 0)
@@ -61,7 +99,7 @@ def ai(
     try:
         prompt_str = json.dumps(prompt, indent=2)
         log_record = AILog(
-            endpoint=endpoint_name,
+            endpoint=f"{endpoint_name}_{used_model}", # Log which model answered!
             prompt=prompt_str,
             response=content,
             latency=latency,
@@ -78,7 +116,7 @@ def ai(
     finally:
         db.close()
 
-    # Trigger LLM-as-a-judge quality evaluation in the background
+    # Trigger LLM-as-a-judge quality evaluation
     if log_id and background_tasks and evaluation_context:
         from app.services.evaluator import evaluate_response_task
         background_tasks.add_task(
