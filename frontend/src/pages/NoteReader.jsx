@@ -170,7 +170,26 @@ function NoteReader() {
                       ? "bg-accent text-white rounded-br-none shadow-[0_4px_15px_rgba(139,92,246,0.15)]"
                       : "bg-cardHover border border-white/5 text-textMain rounded-bl-none"
                       }`}>
-                      {msg.text}
+                      {msg.role === "user" ? (
+                        msg.text
+                      ) : (
+                        <ReactMarkdown
+                          remarkPlugins={[remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                          components={{
+                            p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                            h3: ({ children }) => <h3 className="text-base font-bold mt-3 mb-1 text-accent">{children}</h3>,
+                            h2: ({ children }) => <h2 className="text-base font-bold mt-3 mb-1 text-accentHover">{children}</h2>,
+                            li: ({ children }) => <li className="ml-4 mb-1">{children}</li>,
+                            code: ({ inline, children }) =>
+                              inline
+                                ? <code className="bg-white/10 text-accent px-1 py-0.5 rounded text-xs font-mono">{children}</code>
+                                : <pre className="bg-white/5 border border-white/10 rounded-lg p-3 overflow-x-auto text-xs font-mono my-2"><code>{children}</code></pre>,
+                          }}
+                        >
+                          {msg.text}
+                        </ReactMarkdown>
+                      )}
                     </div>
 
                     {msg.role === "assistant" && msg.sources && msg.sources.length > 0 && (
