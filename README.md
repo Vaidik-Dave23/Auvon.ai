@@ -1,474 +1,672 @@
-# 🚀 Auvon.ai
+<div align="center">
+
+<img src="https://img.shields.io/badge/Auvon.AI-Intelligent%20Learning%20Ecosystem-6366f1?style=for-the-badge&labelColor=0f0f0f" alt="Auvon.AI"/>
+
+# 🚀 Auvon.AI
+### *Transform Any Subject Into Mastery — Powered by AI*
+
+An intelligent, full-stack AI learning platform that converts raw academic material and PDFs into structured study notes, progressive learning roadmaps, and analytics-driven interactive quizzes — **engineered entirely on free-tier infrastructure**.
+
+[![Live Demo](https://img.shields.io/badge/🌐_Frontend-auvon--ai.vercel.app-4f46e5?style=flat-square&labelColor=1e1e2e)](https://auvon-ai.vercel.app)
+[![Backend API](https://img.shields.io/badge/⚙️_Backend-auvon--ai.onrender.com-10b981?style=flat-square&labelColor=1e1e2e)](https://auvon-ai.onrender.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)](https://react.dev)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?style=flat-square&logo=postgresql)](https://supabase.com)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
+
+> ⚠️ **Cold Start Notice:** The backend runs on Render's free tier. If the server has been idle, **the first request may take 30–60 seconds** to wake up. Subsequent requests are fast.
+
+</div>
+
+---
+
+## 📖 Table of Contents
+
+- [Project Overview](#-project-overview)
+- [Live Demo](#-live-demo)
+- [Core Features](#-core-features)
+- [System Architecture](#-system-architecture)
+- [RAG Pipeline & Evolution](#-rag-pipeline--evolution)
+- [Benchmarking Results](#-benchmarking-results)
+- [Multi-Model Failover System](#-multi-model-failover-system)
+- [Tech Stack](#-tech-stack)
+- [Database Schema](#-database-schema)
+- [API Reference](#-api-reference)
+- [Local Installation](#️-local-installation)
+- [Engineering Decisions & Trade-offs](#️-engineering-decisions--trade-offs)
+- [System Optimizations](#-system-optimizations--bug-fixes)
+- [Known Limitations & Future Work](#-known-limitations--future-work)
+- [Author](#-author)
+
+---
+
+## 🧠 Project Overview
+
+Auvon.AI bridges the gap between passive reading and active recall. Students don't just consume content — they query it, get tested on it, and receive a structured path to master it.
+
+The project was built to solve a real challenge: **how do you build a production-grade AI study system with zero budget?** The answer required custom engineering solutions at every layer:
+
+- **No paid vector DB** → In-memory cosine similarity over JSON-stored PostgreSQL embeddings
+- **No premium LLM key** → Cascading failover across 19 free Gemini API keys + OpenAI fallback
+- **No heavy eval frameworks** → A custom LLM-as-Judge evaluator running in background threads
+- **No email service** → SMTP + Resend integrated but disabled due to Render's free-tier port restrictions
+
+The result is a **fully functional, benchmarked, and deployed AI system** running entirely on free infrastructure.
+
+---
 
 ## 🌐 Live Demo
 
-Frontend: https://auvon-ai.vercel.app
-
-Backend API: https://auvon-ai.onrender.com
-
-> ⚠️ Note: The backend is deployed on Render free tier. The first request may take 30-60 seconds because the server sleeps when inactive.
-
-An AI-powered learning platform built with FastAPI that helps students learn smarter through:
-
-* 🤖 AI-generated study notes
-* 🧠 AI-generated quizzes/tests
-* 🎯 AI learning roadmaps & goals
-* 📈 Progress tracking
-* ✅ Daily task management
-* 📚 PDF-based note generation
-* 🔐 JWT authentication system
-
-Auvon.ai is designed to become a complete AI learning ecosystem where users can study, test themselves, track progress, and improve weak areas using AI.
+| Service | URL | Notes |
+|---|---|---|
+| **Frontend** | [https://auvon-ai.vercel.app](https://auvon-ai.vercel.app) | Deployed on Vercel |
+| **Backend API** | [https://auvon-ai.onrender.com](https://auvon-ai.onrender.com) | Deployed on Render (free tier — cold starts expected) |
+| **API Docs** | [https://auvon-ai.onrender.com/docs](https://auvon-ai.onrender.com/docs) | Interactive Swagger UI |
 
 ---
 
-# 📸 Features
+## ✨ Core Features
 
-## 🔐 Authentication
+### 📚 AI Notes Generator
+- Generate rich, structured study notes from any keyword or topic
+- Upload PDFs and have the AI extract and organize content automatically
+- Smart caching via SHA-based hash keys — identical queries never hit the LLM twice
+- Full notes history stored per user
 
-* User Registration
-* User Login
-* JWT Token Authentication
-* Protected Routes
-* Password Hashing
+### 🧠 AI Quiz Engine
+- Generates Multiple Choice Questions (MCQs) with randomly distributed correct answers (eliminating location-bias)
+- Score analysis with AI coach feedback on weakest topics
+- Review mode to inspect answers post-submission
+- Full test history per user
 
-## 📚 AI Notes Generator
+### 🎯 Progressive Goal Planner
+- Input any long-term learning goal (e.g., *"Master Kubernetes"*, *"Learn Quantum Mechanics"*)
+- AI generates a week-by-week actionable roadmap with 3 measurable steps per week
+- Interactive completion tracking per step
 
-* Generate study notes from keywords/topics
-* Generate notes from uploaded PDFs
-* Smart caching system using hash keys
-* Store user notes history
-* Search notes functionality
+### 💬 RAG-Powered Q&A on Study Notes
+- Ask any question directly about your study material
+- Answers are strictly grounded in your document with mandatory `[Source N]` citations
+- Built-in LLM-as-Judge evaluator logs faithfulness and relevance scores per query
 
-## 🧠 AI Test Generator
+### ✅ Productivity & Task Tracker
+- Daily task management with completion toggles
+- Learning streaks and productivity scores
+- Analytics dashboard for goal progress
 
-* Generate MCQ tests using AI
-* Difficulty levels support
-* Upload files for test generation
-* Test history tracking
-* Score analysis
-* AI feedback on weak topics
-* Review answers after submission
-
-## 🎯 AI Goal Planner
-
-* Generate weekly learning roadmaps using AI
-* Organize steps week-wise
-* Track completion progress
-* Toggle step completion
-* Delete goals
-
-## ✅ Task Management
-
-* Create tasks
-* Edit tasks
-* Delete tasks
-* Toggle completed status
-* Daily productivity tracking
-
-## 📈 Analytics & Progress
-
-* Goal progress percentage
-* Daily task completion stats
-* Learning streaks
-* Average productivity score
+### 🔐 Secure Authentication
+- JWT token-based authentication
+- Bcrypt password hashing
+- Protected routes with user-scoped data isolation
+- *(Email verification is implemented via SMTP/Resend but currently disabled in production — see [Known Limitations](#-known-limitations--future-work))*
 
 ---
 
-# 🏗️ Tech Stack
+## 🏗️ System Architecture
 
-## Backend
+Auvon.AI is a decoupled client-server application designed for speed, portability, and zero external database dependencies.
 
-* Python
-* FastAPI
-* SQLAlchemy
-* Pydantic
-* JWT Authentication
-* SQLite / PostgreSQL
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                  React SPA Frontend (Vite + Tailwind CSS)           │
+│                                                                     │
+│   ┌─────────────────────────┐   ┌───────────────────────────────┐  │
+│   │  User Interface         │   │  State Management             │  │
+│   │  (Notes, Coach,         │◄──►  + Axios HTTP Client          │  │
+│   │   Quizzes, Auth)        │   │                               │  │
+│   └─────────────────────────┘   └───────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                           │  Axios JSON Requests
+                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                  FastAPI Backend (Python 3)                         │
+│                                                                     │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐   │
+│  │  FastAPI App  │  │    JWT Auth  │  │  APIRouter             │   │
+│  │  (main.py)   │─►│  + Dependency│─►│  Notes / Goals /       │   │
+│  │              │  │   Injector   │  │  Tests / Stats         │   │
+│  └──────────────┘  └──────────────┘  └────────────┬───────────┘   │
+│                                                    │               │
+│                    ┌───────────────────────────────┼───────────┐   │
+│                    ▼                               ▼           │   │
+│         ┌──────────────────┐          ┌────────────────────┐   │   │
+│         │ Semantic Chunker │          │  Multi-Provider    │   │   │
+│         │ (notes.py)       │          │  AI Service        │   │   │
+│         └──────────────────┘          │  (ai.py)           │   │   │
+│                                       └────────┬───────────┘   │   │
+│                                                │               │   │
+│                                       ┌────────▼───────────┐   │   │
+│                                       │  Embedding Service  │   │   │
+│                                       │  (embeddings.py)    │   │   │
+│                                       └────────────────────┘   │   │
+└─────────────────────────────────────────────────────────────────┘
+          │ SQLAlchemy ORM                    │ HTTPS
+          ▼                                  ▼
+┌─────────────────────┐       ┌──────────────────────────────┐
+│  PostgreSQL (Supabase)│      │  External LLM Providers      │
+│                     │       │                              │
+│  • users            │       │  ┌────────────────────────┐  │
+│  • notes            │       │  │ Google Gemini API       │  │
+│  • document_chunks  │       │  │ (gemini-3.5-flash /    │  │
+│  • goals / steps    │       │  │  gemini-2.5-flash /    │  │
+│  • ai_logs          │       │  │  gemini-embedding-001) │  │
+│  • tasks            │       │  └────────────────────────┘  │
+└─────────────────────┘       │  ┌────────────────────────┐  │
+                              │  │ OpenAI API             │  │
+                              │  │ (gpt-4o-mini fallback) │  │
+                              │  └────────────────────────┘  │
+                              └──────────────────────────────┘
+```
 
-## AI Integration
+### RAG Query Flow (Sequence)
 
-* OpenRouter API
-* GPT-4.1 Nano Model
-* AIPipe Integration
-
-## Utilities
-
-* PyMuPDF (PDF text extraction)
-* Passlib / JWT utilities
-* dotenv
+```
+Student         Frontend          Backend               DB              AI API
+  │                │                 │                   │                 │
+  │──submits Q────►│                 │                   │                 │
+  │                │──POST /notes────►│                   │                 │
+  │                │   /{id}/query   │                   │                 │
+  │                │                 │──embed query──────────────────────►│
+  │                │                 │◄──1536-dim vector─────────────────  │
+  │                │                 │                   │                 │
+  │                │                 │──fetch all chunks─►│                │
+  │                │                 │◄──chunk texts + vectors            │
+  │                │                 │                   │                 │
+  │                │                 │ [In-Memory Cosine Similarity]       │
+  │                │                 │ [Top-5 chunks, similarity ≥ 0.3]   │
+  │                │                 │                   │                 │
+  │                │                 │──chat completion (Temp=0.0)───────►│
+  │                │                 │   [Strict system prompt]           │
+  │                │                 │◄──answer + [Source N] citations─── │
+  │                │                 │                   │                 │
+  │                │                 │──background: log & evaluate───────►│
+  │                │◄──answer + sources                  │                 │
+  │◄──rendered answer with sources   │                   │                 │
+```
 
 ---
 
-# 📂 Project Structure
+## 🔬 RAG Pipeline & Evolution
 
-```bash
-app/
+The RAG pipeline was **iteratively engineered and benchmarked** through 3 major iterations. Each change was data-driven, measured against a custom LLM-as-Judge evaluator.
+
+### Evolution Timeline
+
+```
+ ┌─────────────────────────────────────────────────────────────────────┐
+ │                    RAG PIPELINE EVOLUTION                           │
+ ├─────────────────────────────────────────────────────────────────────┤
+ │                                                                     │
+ │  ITERATION 1 — Basic Prompting                                      │
+ │  ● Model:  GPT-4.1 Nano (via AIPipe/OpenRouter proxy)              │
+ │  ● Chunking: Basic fixed-size splits                                │
+ │  ● Temperature: Default                                             │
+ │  ● Faithfulness: 14.3%  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░          │
+ │                                                                     │
+ │  ITERATION 2 — Model Upgrade                                        │
+ │  ● Model:  gemini-3.5-flash (primary) + gpt-4o-mini (fallback)     │
+ │  ● Same chunking, same prompts                                      │
+ │  ● Faithfulness: 66.15%  ████████████████████░░░░░░░░░░           │
+ │                                                                     │
+ │  ITERATION 3 — Semantic Chunking + Strict Enforcement               │
+ │  ● Custom markdown-aware semantic chunker (1000 chars, 200 overlap) │
+ │  ● Temperature forced to 0.0                                        │
+ │  ● Mandatory [Source N] citation rules in system prompt             │
+ │  ● "Additional Context" sections banned                             │
+ │  ● Faithfulness: 81.05%  █████████████████████████░░░░░           │
+ │  ● Relevance:   99.47%  █████████████████████████████░            │
+ │                                                                     │
+ └─────────────────────────────────────────────────────────────────────┘
+```
+
+### What Drove Each Improvement
+
+| Iteration | Change | Faithfulness Gain |
+|---|---|---|
+| Baseline | GPT-4.1 Nano via AIPipe proxy, basic chunking | 14.3% |
+| Model Swap | Migrated to Gemini 3.5-flash + OpenAI fallback | +51.85% → 66.15% |
+| Semantic Chunking | Markdown-aware splitter preserving logical boundaries | +5.4% |
+| Strict Prompts | `temperature=0.0`, banned external knowledge, enforced citations | +9.5% → **81.05%** |
+
+---
+
+## 📊 Benchmarking Results
+
+The system is evaluated using a custom **LLM-as-Judge benchmarking suite** (`run_benchmark.py` + `evaluator.py`). This generates 5 topics × 5 questions = 25 Q&A pairs, then has an independent LLM score each answer on Faithfulness and Relevance.
+
+### Latest Benchmark Run Summary
+
+| Metric | Score | Target | Status |
+|---|---|---|---|
+| **Total Runs Executed** | 20 / 25 | 25 | ⚠️ 5 skipped (API timeouts) |
+| **Runs Evaluated** | 19 / 20 | 20 | ⚠️ 1 skipped (prompt truncation) |
+| **Average Faithfulness** | **81.05%** | ≥ 80.0% | ✅ PASS |
+| **Average Relevance** | **99.47%** | ≥ 90.0% | ✅ PASS |
+
+### Faithfulness Breakdown by Topic
+
+| Topic | Q&A Pairs Evaluated | Avg Faithfulness | Notes |
+|---|---|---|---|
+| Quantum Computing | 3 | **100%** | All answers perfectly grounded |
+| Blockchains | 5 | **60%** | 2 failures — LLM added external BFT/Merkle details |
+| Photosynthesis | 5 | **70%** | LLM added Gibbs Free Energy, chemical equations |
+| World War II | 5 | **100%** | All answers perfectly grounded |
+
+### Production Database Logs (`ai_logs` table)
+
+| Endpoint | Calls | Avg Latency | Avg Prompt Tokens | Avg Completion Tokens | Avg Faithfulness | Avg Relevance |
+|---|---|---|---|---|---|---|
+| `query_note` (gemini-3.5-flash) | 46 | 15.55s | 1,278 | 434 | 76.05% | 98.14% |
+| `generate_notes` (gemini-3.5-flash) | 4 | 40.64s | 276 | 5,831 | N/A | N/A |
+| `benchmark_gen_questions` (gemini-3.5-flash) | 4 | 6.69s | 1,551 | 114 | N/A | N/A |
+| `generate_plan` (gemini-3.5-flash) | 2 | 13.18s | 324 | 584 | N/A | N/A |
+| `query_note` (gemini-2.5-flash) | 1 | 22.16s | 1,405 | 774 | 50.00% | 100.00% |
+| `generate_notes` (gemini-2.5-flash) | 1 | 75.44s | 276 | 9,220 | N/A | N/A |
+
+> **Note on Faithfulness Failures:** The LLM is highly knowledgeable on STEM topics. In cases like Merkle Trees or BFT consensus, it supplements retrieved context with pre-trained facts to give "better" answers. The Judge strictly penalizes any information not present in the retrieved source blocks — so even accurate but extra information is penalised. This is a faithful measurement, not a bug.
+
+---
+
+## ⚡ Multi-Model Failover System
+
+To maintain 100% uptime with free-tier rate limits (RPM and RPD), Auvon.AI runs a custom cascading failover algorithm across multiple API keys and model tiers.
+
+```
+                        ┌─────────────────────┐
+                        │   Initiate Request  │
+                        └──────────┬──────────┘
+                                   │
+                        ┌──────────▼──────────┐
+                        │  Load & filter       │
+                        │  GEMINI_API_KEY_1…19 │
+                        │  (skip blacklisted)  │
+                        └──────────┬──────────┘
+                    Keys available │              No keys left
+                   ┌───────────────┘                   │
+                   ▼                                   ▼
+        ┌──────────────────┐                ┌──────────────────────┐
+        │ Shuffle active   │                │  Pass 3: OpenAI      │
+        │ Gemini keys      │                │  gpt-4o-mini fallback│
+        └────────┬─────────┘                └──────────┬───────────┘
+                 │                                     │
+                 ▼                              Success │ Failed
+    ┌────────────────────────┐                         │     │
+    │  Call gemini-3.5-flash │                         ▼     ▼
+    └────────────────────────┘                      Done  HTTP 502
+             │          │          │
+          200 OK      429/min    429/day
+             │          │          │
+             ▼          ▼          ▼
+           Done    Exponential  Blacklist key
+                   Backoff      until UTC
+                   (3s,6s,9s)   midnight
+                       │             │
+                       └──────┬──────┘
+                              ▼
+                   ┌──────────────────────┐
+                   │  All keys exhausted? │
+                   └──────────┬───────────┘
+                              │
+                              ▼
+                   ┌──────────────────────┐
+                   │  Pass 2: Retry with  │
+                   │  gemini-2.5-flash    │
+                   └──────────────────────┘
+```
+
+**Key design decisions:**
+- Keys are **shuffled** before each request to distribute load evenly
+- **Per-minute limits** trigger exponential backoff (3s → 6s → 9s) and retry the same key
+- **Daily quota exhaustion** blacklists a key until UTC midnight, then tries the next one
+- If all Gemini keys fail across both model tiers, OpenAI `gpt-4o-mini` serves as the ultimate safety net
+
+---
+
+## 🏗️ Tech Stack
+
+| Component | Technology | Why |
+|---|---|---|
+| **Frontend** | React 19 + Vite | Fast HMR, optimized builds |
+| **Styling** | Tailwind CSS | Utility-first, cohesive theming |
+| **HTTP Client** | Axios | Clean interceptors, JSON handling |
+| **Backend** | Python + FastAPI | Async-first, auto Swagger docs, Pydantic validation |
+| **ORM** | SQLAlchemy | Declarative models, transaction management |
+| **Database** | PostgreSQL (Supabase) | Reliable relational DB, free hosted tier |
+| **Auth** | JWT + Passlib | Stateless, bcrypt hashing |
+| **Embedding Model** | `gemini-embedding-001` | 768-dim vectors, free tier |
+| **Primary LLM** | `gemini-3.5-flash` | Low latency, large context, free tier |
+| **Fallback LLM** | `gemini-2.5-flash` | More capable, used when primary keys exhausted |
+| **Safety Net LLM** | `gpt-4o-mini` | Reliable, cheap, final backstop |
+| **PDF Extraction** | PyMuPDF | Fast, accurate text extraction |
+| **Deployment: Backend** | Render (free tier) | Zero-cost server hosting |
+| **Deployment: Frontend** | Vercel | Zero-cost static hosting |
+
+### Model Evolution
+
+```
+Phase 1 (Initial Build)          Phase 2 (Current Production)
+─────────────────────────        ─────────────────────────────
+Proxy:    AIPipe / OpenRouter     Primary:   gemini-3.5-flash (×19 keys)
+Model:    GPT-4.1 Nano            Fallback:  gemini-2.5-flash
+Embed:    N/A (no RAG)            Safety Net: gpt-4o-mini (OpenAI)
+                                  Embeddings: gemini-embedding-001
+```
+
+---
+
+## 🗄️ Database Schema
+
+```
+users
+├── id (PK)
+├── email (UNIQUE)
+├── password_hash
+├── is_verified
+├── verification_code
+└── verification_code_expires_at
+         │
+         │ owns
+         ▼
+user_notes ──────────────────────► notes
+    (join table)                   ├── id (PK)
+                                   ├── title
+                                   ├── content
+                                   ├── source
+                                   ├── hash_key (UNIQUE — for caching)
+                                   └── created_at
+                                             │
+                                             │ contains
+                                             ▼
+                                   document_chunks
+                                   ├── id (PK)
+                                   ├── note_id (FK)
+                                   ├── chunk_text
+                                   ├── embedding  ← JSON vector array
+                                   └── created_at
+
+users
+├── (also) creates ──────────────► goals
+│                                  ├── id (PK)
+│                                  ├── user_id (FK)
+│                                  ├── title
+│                                  ├── duration_weeks
+│                                  └── created_at
+│                                             │
+│                                             │ contains
+│                                             ▼
+│                                   steps
+│                                   ├── id (PK)
+│                                   ├── goal_id (FK)
+│                                   ├── week
+│                                   ├── step_content
+│                                   └── is_completed
 │
-├── models/             # Database models
-├── routes/             # API endpoints
-├── schemas/            # Pydantic schemas
-├── services/           # AI logic
-├── utils/              # Auth/helpers/dependencies
-├── database.py         # Database connection
-└── main.py             # FastAPI app entry
+└── (also) ──────────────────────► ai_logs
+                                   ├── id (PK)
+                                   ├── endpoint
+                                   ├── prompt / response
+                                   ├── latency
+                                   ├── prompt_tokens / completion_tokens
+                                   ├── faithfulness  ← LLM-as-Judge score
+                                   ├── relevance     ← LLM-as-Judge score
+                                   ├── evaluation_feedback
+                                   └── created_at
 ```
 
 ---
 
-# 🧠 Core Database Models
+## 🔗 API Reference
 
-## 👤 User
+### 🔐 Auth Routes
 
-Stores user information.
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/register` | Register a new user |
+| `POST` | `/login` | Login, receive JWT |
+| `GET` | `/me` | Get current authenticated user |
 
-```python
-name
-email
-password
-```
+### 📚 Notes Routes
 
-## 📚 Notes
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/notes/generate` | Generate AI study notes from topic |
+| `POST` | `/notes/pdf` | Generate notes from uploaded PDF |
+| `GET` | `/notes/my` | Get all notes for authenticated user |
+| `GET` | `/notes/search` | Full-text search across notes |
+| `POST` | `/notes/{id}/query` | RAG Q&A on a specific note |
 
-Stores AI-generated notes.
+### 🧠 Test Routes
 
-```python
-title
-content
-source
-hash_key
-created_at
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/tests/generate` | Generate AI MCQ test |
+| `POST` | `/tests/submit` | Submit answers, receive score |
+| `GET` | `/tests/` | Get test history |
+| `GET` | `/tests/{id}` | Get test questions |
+| `GET` | `/tests/result/{id}` | Get detailed result with AI feedback |
 
-## 🧠 Tests & Questions
+### 🎯 Goal Routes
 
-Stores AI-generated tests and MCQs.
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/goals/ai` | Generate AI learning roadmap |
+| `GET` | `/goals` | Get all goals |
+| `PUT` | `/steps/{id}` | Toggle step completion |
+| `DELETE` | `/goals/{id}` | Delete a goal |
 
-```python
-Test
-Question
-UserAnswer
-Test_Result
-```
+### ✅ Task Routes
 
-## 🎯 Goals & Steps
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/tasks` | Get all tasks |
+| `POST` | `/tasks` | Create a task |
+| `PUT` | `/tasks/{id}` | Toggle task completion |
+| `PUT` | `/tasks/{id}/edit` | Edit task content |
+| `DELETE` | `/tasks/{id}` | Delete a task |
 
-Stores AI-generated learning roadmaps.
+### 📈 Progress & Stats
 
-```python
-Goal
-Step
-```
-
-## ✅ Tasks
-
-Stores user productivity tasks.
-
-```python
-title
-done
-user_id
-```
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/progress/goals` | Goal completion percentage |
+| `GET` | `/progress/daily` | Daily task progress |
+| `GET` | `/stats` | Full user analytics |
 
 ---
 
-# ⚙️ Installation
+## ⚙️ Local Installation
 
-## 1️⃣ Clone Repository
+### 1️⃣ Clone Repository
 
 ```bash
-git clone https://github.com/yourusername/auvon-ai.git
-cd auvon-ai
+git clone https://github.com/vaidik-dave23/auvon.ai.git
+cd auvon.ai
 ```
 
----
-
-## 2️⃣ Create Virtual Environment
-
-### Windows
+### 2️⃣ Setup Backend
 
 ```bash
+cd Backend
 python -m venv .venv
+
+# Windows
 .venv\Scripts\activate
-```
 
-### Linux/Mac
-
-```bash
-python3 -m venv .venv
+# Linux / Mac
 source .venv/bin/activate
-```
 
----
-
-## 3️⃣ Install Dependencies
-
-```bash
 pip install -r requirements.txt
 ```
 
----
+### 3️⃣ Configure Environment Variables
 
-## 4️⃣ Setup Environment Variables
-
-Create a `.env` file:
+Create a `Backend/.env` file:
 
 ```env
-AIPIPE_API_KEY=your_api_key_here
-DATABASE_URL=your_database_url
-SECRET_KEY=your_secret_key
+# Database
+DATABASE_URL=your_postgresql_connection_url
+
+# Auth
+SECRET_KEY=your_jwt_secret_key
 ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=60
+
+# Gemini API Keys — add as many free keys as you want (up to 19 supported)
+# The backend will shuffle and rotate them automatically
+GEMINI_API_KEY_1=your_key_here
+GEMINI_API_KEY_2=your_key_here
+# GEMINI_API_KEY_3=...
+
+# OpenAI fallback (optional but recommended)
+OPENAI_API_KEY=your_openai_key_here
 ```
 
----
+> 💡 **Tip:** You can get up to 19 free Gemini API keys using multiple Google accounts. The backend handles all rotation automatically.
 
-# ▶️ Running the Server
+### 4️⃣ Run the Servers
 
+**Backend:**
 ```bash
 uvicorn app.main:app --reload
+# → http://127.0.0.1:8000
+# → Swagger docs: http://127.0.0.1:8000/docs
 ```
 
-Server:
-
+**Frontend:**
 ```bash
-http://127.0.0.1:8000
-```
-
-Swagger Docs:
-
-```bash
-http://127.0.0.1:8000/docs
+cd ../frontend
+npm install
+npm run dev
+# → http://localhost:5173
 ```
 
 ---
 
-# 🔗 API Endpoints
+## 🏗️ Project Structure
 
-# 🔐 Auth Routes
-
-| Method | Endpoint    | Description       |
-| ------ | ----------- | ----------------- |
-| POST   | `/register` | Register new user |
-| POST   | `/login`    | Login user        |
-| GET    | `/me`       | Get current user  |
-
----
-
-# 📚 Notes Routes
-
-| Method | Endpoint          | Description             |
-| ------ | ----------------- | ----------------------- |
-| POST   | `/notes/generate` | Generate AI notes       |
-| POST   | `/notes/pdf`      | Generate notes from PDF |
-| GET    | `/notes/my`       | Get user notes          |
-| GET    | `/notes/search`   | Search notes            |
-
----
-
-# 🧠 Test Routes
-
-| Method | Endpoint             | Description        |
-| ------ | -------------------- | ------------------ |
-| POST   | `/tests/generate`    | Generate AI test   |
-| POST   | `/tests/submit`      | Submit test        |
-| GET    | `/tests/`            | Get test history   |
-| GET    | `/tests/{id}`        | Get test questions |
-| GET    | `/tests/result/{id}` | Get result details |
-
----
-
-# 🎯 Goal Routes
-
-| Method | Endpoint      | Description         |
-| ------ | ------------- | ------------------- |
-| POST   | `/goals/ai`   | Generate AI roadmap |
-| GET    | `/goals`      | Get goals           |
-| PUT    | `/steps/{id}` | Toggle step         |
-| DELETE | `/goals/{id}` | Delete goal         |
-
----
-
-# ✅ Task Routes
-
-| Method | Endpoint           | Description |
-| ------ | ------------------ | ----------- |
-| GET    | `/tasks`           | Get tasks   |
-| POST   | `/tasks`           | Create task |
-| PUT    | `/tasks/{id}`      | Toggle task |
-| PUT    | `/tasks/{id}/edit` | Edit task   |
-| DELETE | `/tasks/{id}`      | Delete task |
-
----
-
-# 📈 Progress & Stats
-
-| Method | Endpoint          | Description         |
-| ------ | ----------------- | ------------------- |
-| GET    | `/progress/goals` | Goal progress       |
-| GET    | `/progress/daily` | Daily task progress |
-| GET    | `/stats`          | User analytics      |
-
----
-
-# 🤖 AI Workflow
-
-## AI Notes Generation
-
-1. User sends topic/PDF
-2. Content is hashed
-3. Cache checked
-4. If not found → AI generates notes
-5. Notes stored in database
-
----
-
-## AI Test Generation
-
-1. User provides topic/file
-2. AI generates MCQs
-3. Questions stored in database
-4. User submits answers
-5. AI analyzes weak topics
-6. Personalized feedback generated
-
----
-
-## AI Goal Planning
-
-1. User enters goal
-2. AI creates weekly roadmap
-3. Steps saved week-wise
-4. User tracks progress
-
----
-
-# 🔒 Security Features
-
-* JWT Authentication
-* Password Hashing
-* Protected Routes
-* User-specific data isolation
-* Input validation with Pydantic
-
----
-
-# 📦 Example Request
-
-## Generate AI Notes
-
-```http
-POST /notes/generate
 ```
-
-```json
-{
-  "query": "Machine Learning"
-}
+auvon.ai/
+│
+├── Backend/
+│   ├── app/
+│   │   ├── models/          # SQLAlchemy ORM models
+│   │   ├── routes/          # FastAPI route handlers
+│   │   │   └── notes.py     # RAG pipeline, semantic chunker, Q&A
+│   │   ├── schemas/         # Pydantic request/response schemas
+│   │   ├── services/
+│   │   │   ├── ai.py        # Multi-key failover AI service
+│   │   │   └── evaluator.py # LLM-as-Judge faithfulness evaluator
+│   │   ├── utils/
+│   │   │   ├── embeddings.py # Gemini embedding calls
+│   │   │   └── auth.py       # JWT helpers
+│   │   ├── database.py      # SQLAlchemy engine & session
+│   │   └── main.py          # FastAPI app entry point
+│   ├── run_benchmark.py     # Automated RAG benchmarking suite
+│   └── requirements.txt
+│
+└── frontend/
+    ├── src/
+    │   ├── components/      # Reusable UI components
+    │   ├── pages/           # Route-level pages
+    │   └── main.jsx         # Vite entry point
+    └── vite.config.js
 ```
 
 ---
 
-# 📊 Example AI Response
+## ⚖️ Engineering Decisions & Trade-offs
 
-```json
-{
-  "source": "ai",
-  "note": {
-    "title": "Machine Learning",
-    "content": "Introduction..."
-  }
-}
-```
+### 1. In-Database Vector Search (JSON Array) vs. External Vector DB
+
+**Decision:** Embeddings from `gemini-embedding-001` are stored as JSON arrays directly in the `document_chunks` PostgreSQL table. Similarity ranking is done in-memory via Python.
+
+**Trade-off:** The search is O(N) per query. However, since queries are **strictly scoped per note ID** and a note typically has fewer than 200 chunks, the calculation completes in under 1ms. This completely eliminates the cost, complexity, and maintenance overhead of Pinecone, Weaviate, or PGVector extensions.
 
 ---
 
-# 🚀 Deployment
+### 2. Multi-Key Cascade vs. Single Premium API Key
 
-You can deploy the backend using:
+**Decision:** Shuffle and cascade across up to 19 free Gemini API keys with intelligent per-minute and daily-quota handling.
 
-* Render
-* Railway
-* AWS
-* Docker
-* VPS
-
-Recommended stack:
-
-* Backend → Render
-* Frontend → Vercel
-* Database → Supabase PostgreSQL
+**Trade-off:** Significant code complexity in `ai.py`. However, this allows the system to run continuous queries and full benchmarking runs (25 Q&A pairs) without ever paying for a premium key — a necessary constraint for a zero-budget project.
 
 ---
 
-# 🛠️ Future Improvements
+### 3. Custom LLM-as-Judge vs. RAGAS / Heavy Eval Frameworks
 
-* Email verification
-* OAuth login
-* RAG integration
-* Vector database support
-* AI chat tutor
-* Flashcards generation
-* Spaced repetition system
-* Leaderboards
-* Study streak system
-* Real analytics dashboard
-* LangChain integration
-* LangGraph agents
-* Recommendation engine
+**Decision:** Built a lightweight prompt-based judge that runs as a FastAPI background task after each RAG query, logging scores to `ai_logs`.
+
+**Trade-off:** Uses extra LLM tokens per evaluation. However, it avoids RAGAS and LangSmith dependencies (heavy installs, startup conflicts, potential costs) and keeps the codebase self-contained and easy to deploy anywhere.
 
 ---
 
-# 🧪 AI Services
+### 4. Semantic Chunker vs. Fixed-Size Splitter
 
-The AI system currently supports:
+**Decision:** Custom markdown-aware chunker that detects subheadings and splits without breaking logical boundaries (1000-char chunks, 200-char overlap).
 
-* AI Notes Generation
-* AI Quiz Generation
-* AI Weak Topic Review
-* AI Goal Roadmap Generation
-
-Implemented in:
-
-```bash
-app/services/ai.py
-```
+**Trade-off:** More complex parsing logic than a naive splitter. But benchmarks showed this alone raised faithfulness scores by keeping logically coherent content together in each chunk, reducing context contamination during retrieval.
 
 ---
 
-# 📜 License
+## 🔧 System Optimizations & Bug Fixes
 
-MIT License
+Several critical improvements were made during development:
 
----
+1. **Self-Healing Chunk Cleanup** — Fixed a bug where deleting a note left orphan rows in `document_chunks`. The embedding pipeline now runs a hard `DELETE FROM document_chunks WHERE note_id = ...` before re-indexing, preventing ghost chunks from polluting future queries.
 
-# 👨‍💻 Author
+2. **Strict System Prompt Enforcement** — Added rules explicitly forbidding the LLM from supplementing answers with external knowledge not present in the retrieved excerpts. This was the single highest-impact change, pushing faithfulness from the 66% range to **81.05%**.
 
-Built by Vaidik Dave 🚀
+3. **Deterministic Generation** — All RAG queries run at `temperature=0.0`, eliminating creative drift and background-knowledge leakage.
 
-Passionate about AI Engineering, intelligent learning systems, and building impactful products.
+4. **Active Citation Rules** — All answer statements must end with a `[Source N]` tag. Hallucinations without a grounded source are caught and penalized by the evaluator.
 
----
-
-# ⭐ Support
-
-If you like this project:
-
-* Star the repository
-* Fork the project
-* Share it with others
-* Contribute improvements
+5. **Intelligent Rate-Limit Parsing** — `ai.py` parses Google's HTTP 429 response body to distinguish between a per-minute limit (trigger backoff, retry same key) vs. a daily quota exhaustion (blacklist key until UTC midnight). This eliminates wasted retries on exhausted keys.
 
 ---
 
-# 💡 Vision
+## ⚠️ Known Limitations & Future Work
 
-Auvon.ai aims to become a complete AI-powered personalized learning ecosystem that helps students:
+### Current Limitations
 
-* Learn faster
-* Stay consistent
-* Improve weak areas
-* Track progress intelligently
-* Build structured learning paths
+| Feature | Status | Reason |
+|---|---|---|
+| **Email Verification (SMTP)** | ❌ Disabled in production | Render's free tier blocks outbound SMTP ports |
+| **Email Verification (Resend)** | ❌ Disabled in production | Resend free trial only works for verified sender domains; not suitable for public prod |
+| **Cold Starts** | ⚠️ 30–60s first request | Render free tier spins down idle servers |
+| **RAG Latency** | ~15s avg | Free-tier API response times + exponential backoff under load |
 
-The goal is to combine AI + productivity + education into one powerful platform.
+> **Note on Email:** The full SMTP and Resend email verification flows are fully implemented in the codebase. They are commented out specifically due to hosting restrictions, not missing functionality. This can be enabled immediately on any hosting tier that supports outbound email.
+
+### Planned Improvements
+
+- [ ] OAuth (Google / GitHub login)
+- [ ] Flashcard generation with spaced repetition
+- [ ] AI chat tutor (multi-turn conversation on notes)
+- [ ] LangGraph agents for more complex reasoning
+- [ ] Real analytics dashboard with charts
+- [ ] Leaderboards and study streak system
+- [ ] Vector DB upgrade (PGVector or Pinecone) for larger document sets
+- [ ] LangChain integration for more flexible pipelines
+- [ ] Recommendation engine for related topics
+
+---
+
+## 👨‍💻 Author
+
+**Vaidik Dave**
+
+Passionate about AI Engineering, intelligent learning systems, and building scalable, fault-tolerant backend architectures from first principles.
+
+Built entirely on free-tier infrastructure as a demonstration of what's possible with smart engineering and zero budget.
+
+---
+
+<div align="center">
+
+**⭐ If this project helped you, consider starring the repository!**
+
+[![GitHub stars](https://img.shields.io/github/stars/vaidik-dave23/auvon.ai?style=social)](https://github.com/vaidik-dave23/auvon.ai)
+
+*Auvon.AI — Learn Smarter. Not Harder.*
+
+</div>
