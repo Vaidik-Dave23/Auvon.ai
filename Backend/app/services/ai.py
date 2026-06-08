@@ -5,118 +5,275 @@ import requests
 from fastapi import HTTPException, BackgroundTasks
 from dotenv import load_dotenv
 import time
+import datetime
+from threading import Lock
 from app.database import SessionLocal
 from app.models.ai_log import AILog
 
 load_dotenv()
 
-def ai(
-    prompt: list[dict], 
-    endpoint_name: str = "custom", 
-    background_tasks: BackgroundTasks = None, 
-    evaluation_context: dict = None
-) -> str:
-    """Core aipipe caller with Gemini fallback."""
-    load_dotenv(override=True)
-    api_key = os.getenv("AIPIPE_API_KEY")
-    gemini_key = os.getenv("GEMINI_API_KEY")
+# ---------------------------------------------------------------------------
+# Provider configuration
+# ---------------------------------------------------------------------------
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+OPENAI_BASE_URL  = "https://api.openai.com/v1/chat/completions"
 
-    # --- PRIMARY PROVIDER SETUP (AIPipe / OpenRouter) ---
-    primary_url = "https://aipipe.org/openrouter/v1/chat/completions"
-    primary_headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    primary_data = {
-        "model": "openai/gpt-4o-mini", 
-        "messages": prompt,
-    }
+GEMINI_PRIMARY_MODEL  = "gemini-3.5-flash"
+GEMINI_FALLBACK_MODEL = "gemini-2.5-flash"
+OPENAI_MODEL          = "gpt-4o-mini"   # cheap, fast, reliable final fallback
 
-    start_time = time.time()
-    response_json = None
-    latency = 0
+# ---------------------------------------------------------------------------
+# Gemini daily-key blacklist (resets at UTC midnight)
+# ---------------------------------------------------------------------------
+_daily_exhausted: dict[str, str] = {}
+_blacklist_lock = Lock()
 
+
+def _today() -> str:
+    return datetime.datetime.utcnow().strftime("%Y-%m-%d")
+
+
+def _is_daily_exhausted(key: str) -> bool:
+    with _blacklist_lock:
+        return _daily_exhausted.get(key) == _today()
+
+
+def _mark_daily_exhausted(key: str) -> None:
+    with _blacklist_lock:
+        _daily_exhausted[key] = _today()
+    print(f"🚫 Gemini key ...{key[-4:]} daily quota gone — skipping until tomorrow (UTC).")
+
+
+def _is_daily_quota_error(text: str) -> bool:
     try:
-        # Attempt Primary AI
-        if not api_key:
-            raise ValueError("No AIPIPE_API_KEY found")
-            
-        response = requests.post(primary_url, headers=primary_headers, json=primary_data, timeout=90)
-        
-        # If it's a 402 or 502, force an exception to trigger the fallback
-        if response.status_code != 200:
-            print(f"🔥 Primary AI Error: {response.status_code} - {response.text}")
-            response.raise_for_status()
-            
-        response_json = response.json()
-        latency = time.time() - start_time
-        used_model = "primary"
+        data = json.loads(text)
+        if isinstance(data, list) and len(data) > 0:
+            data = data[0]
+        error = data.get("error", {})
+        details = error.get("details", [])
+        for detail in details:
+            if detail.get("@type") == "type.googleapis.com/google.rpc.QuotaFailure":
+                violations = detail.get("violations", [])
+                for violation in violations:
+                    quota_id = violation.get("quotaId", "").lower()
+                    if "perday" in quota_id or "daily" in quota_id:
+                        return True
+                return False
+    except Exception:
+        pass
 
-    except Exception as e:
-        print(f"⚠️ Primary AI failed ({e}). Attempting Gemini Fail-Safe...")
-        
-        # --- FALLBACK SETUP (Gemini OpenAI-Compatible Endpoint) ---
-        if not gemini_key:
-            raise HTTPException(status_code=502, detail="Primary AI failed and no GEMINI_API_KEY found.")
+    lower = text.lower()
+    if "perday" in lower or "daily limit" in lower or "ratequotaexceeded" in lower:
+        return True
+    if "per minute" in lower or "per-minute" in lower or "queries per minute" in lower:
+        return False
 
-        gemini_url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-        gemini_headers = {
-            "Authorization": f"Bearer {gemini_key}",
-            "Content-Type": "application/json",
-        }
-        gemini_data = {
-            "model": "gemini-3.5-flash", # Fast, reliable, large context window
-            "messages": prompt,
-        }
+    return any(p in lower for p in ["quota exceeded", "resource exhausted", "per day"])
 
-        gemini_start = time.time()
+
+# ---------------------------------------------------------------------------
+# Key loaders
+# ---------------------------------------------------------------------------
+
+def _load_gemini_keys() -> list[str]:
+    """Return all non-exhausted Gemini keys, shuffled."""
+    keys = []
+    for i in range(1, 20):
+        k = os.getenv(f"GEMINI_API_KEY_{i}")
+        if k:
+            keys.append(k.strip())
+    if not keys:
+        single = os.getenv("GEMINI_API_KEY")
+        if single:
+            keys.append(single.strip())
+
+    active = [k for k in keys if not _is_daily_exhausted(k)]
+    skipped = len(keys) - len(active)
+    if skipped:
+        print(f"ℹ️  {skipped}/{len(keys)} Gemini key(s) daily-exhausted, skipping.")
+    random.shuffle(active)
+    return active
+
+
+def _load_openai_key() -> str | None:
+    return os.getenv("OPENAI_API_KEY", "").strip() or None
+
+
+# ---------------------------------------------------------------------------
+# Raw HTTP callers
+# ---------------------------------------------------------------------------
+
+def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 90, temperature: float = None) -> dict:
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    
+    max_retries = 3
+    for attempt in range(max_retries):
         try:
-            g_response = requests.post(gemini_url, headers=gemini_headers, json=gemini_data, timeout=90)
-            if g_response.status_code != 200:
-                print(f"🔥 Gemini Fallback Error: {g_response.status_code} - {g_response.text}")
-                g_response.raise_for_status()
-                
-            response_json = g_response.json()
-            latency = time.time() - gemini_start
-            used_model = "gemini-fallback"
+            payload = {"model": model, "messages": messages}
+            if temperature is not None:
+                payload["temperature"] = temperature
+            resp = requests.post(GEMINI_BASE_URL, headers=headers, json=payload, timeout=timeout)
             
-        except Exception as backup_e:
-             raise HTTPException(status_code=502, detail=f"Both primary and backup AIs failed. Last error: {backup_e}")
+            if resp.status_code == 200:
+                return resp.json()
+                
+            if resp.status_code == 429:
+                if _is_daily_quota_error(resp.text):
+                    _mark_daily_exhausted(api_key)
+                    raise RuntimeError(f"Daily quota exhausted on {model}")
+                
+                sleep_time = (attempt + 1) * 3
+                print(f"⏳ Key ...{api_key[-4:]} per-minute limit on {model}. Attempt {attempt + 1}/{max_retries}. Backing off {sleep_time}s…")
+                time.sleep(sleep_time)
+                continue
+                
+            if resp.status_code == 401:
+                raise RuntimeError("Invalid Gemini API key (401)")
+                
+            raise RuntimeError(f"Gemini HTTP {resp.status_code} on {model}: {resp.text[:300]}")
+            
+        except requests.exceptions.RequestException as e:
+            if attempt < max_retries - 1:
+                sleep_time = (attempt + 1) * 3
+                print(f"⏳ Connection error: {e}. Retrying in {sleep_time}s...")
+                time.sleep(sleep_time)
+                continue
+            raise e
+            
+    raise RuntimeError(f"Per-minute rate limit on {model} exceeded after {max_retries} retries")
 
-    # --- PARSING AND LOGGING (Works for both!) ---
+
+def _call_openai(api_key: str, messages: list[dict], timeout: int = 90, temperature: float = None) -> dict:
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    payload = {"model": OPENAI_MODEL, "messages": messages}
+    if temperature is not None:
+        payload["temperature"] = temperature
+    resp = requests.post(OPENAI_BASE_URL, headers=headers, json=payload, timeout=timeout)
+
+    if resp.status_code == 429:
+        raise RuntimeError("OpenAI rate limit (429)")
+
+    if resp.status_code == 401:
+        raise RuntimeError("Invalid OpenAI API key (401)")
+
+    if resp.status_code != 200:
+        raise RuntimeError(f"OpenAI HTTP {resp.status_code}: {resp.text[:300]}")
+
+    return resp.json()
+
+
+# ---------------------------------------------------------------------------
+# Core ai() function
+# ---------------------------------------------------------------------------
+
+def ai(
+    prompt: list[dict],
+    endpoint_name: str = "custom",
+    background_tasks: BackgroundTasks = None,
+    evaluation_context: dict = None,
+    temperature: float = None,
+) -> str:
+    """
+    Multi-provider AI caller.
+
+    Cascade:
+      1. Gemini gemini-2.0-flash      — try every non-exhausted key
+      2. Gemini gemini-2.0-flash-lite — retry all keys on lighter model
+      3. OpenAI gpt-4o-mini           — if OPENAI_API_KEY is set
+
+    .env setup:
+        GEMINI_API_KEY_1=AIza...
+        GEMINI_API_KEY_2=AIza...   (add as many free keys as you have)
+        OPENAI_API_KEY=sk-...      (optional — final safety net)
+    """
+    load_dotenv(override=True)
+
+    response_json = None
+    used_model    = None
+    start_time    = time.time()
+    last_error    = None
+
+    # ── Pass 1: Gemini primary ──────────────────────────────────────────────
+    keys = _load_gemini_keys()
+    for key in keys:
+        try:
+            response_json = _call_gemini(key, GEMINI_PRIMARY_MODEL, prompt, temperature=temperature)
+            used_model = f"gemini/{GEMINI_PRIMARY_MODEL}"
+            break
+        except Exception as e:
+            last_error = e
+            print(f"⚠️  Key ...{key[-4:]} failed on {GEMINI_PRIMARY_MODEL}: {e}")
+
+    # ── Pass 2: Gemini fallback model ───────────────────────────────────────
+    if response_json is None:
+        keys = _load_gemini_keys()   # re-load so freshly-exhausted keys are excluded
+        if keys:
+            print(f"🔁 Trying {GEMINI_FALLBACK_MODEL} with {len(keys)} key(s)…")
+            for key in keys:
+                try:
+                    response_json = _call_gemini(key, GEMINI_FALLBACK_MODEL, prompt, temperature=temperature)
+                    used_model = f"gemini/{GEMINI_FALLBACK_MODEL}"
+                    break
+                except Exception as e:
+                    last_error = e
+                    print(f"⚠️  Key ...{key[-4:]} failed on {GEMINI_FALLBACK_MODEL}: {e}")
+
+    # ── Pass 3: OpenAI safety net ───────────────────────────────────────────
+    if response_json is None:
+        openai_key = _load_openai_key()
+        if openai_key:
+            print(f"🔁 All Gemini keys exhausted — trying OpenAI {OPENAI_MODEL}…")
+            try:
+                response_json = _call_openai(openai_key, prompt, temperature=temperature)
+                used_model = f"openai/{OPENAI_MODEL}"
+            except Exception as e:
+                last_error = e
+                print(f"⚠️  OpenAI fallback failed: {e}")
+
+    if response_json is None:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"All AI providers failed. Last error: {last_error}. "
+                "Check GEMINI_API_KEY_* and OPENAI_API_KEY in .env."
+            ),
+        )
+
+    latency = time.time() - start_time
+
+    # ── Parse response ──────────────────────────────────────────────────────
     try:
         content = response_json["choices"][0]["message"]["content"]
-        usage = response_json.get("usage", {})
-        prompt_tokens = usage.get("prompt_tokens", 0)
+        usage   = response_json.get("usage", {})
+        prompt_tokens     = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
-        total_tokens = usage.get("total_tokens", 0)
+        total_tokens      = usage.get("total_tokens", 0)
     except (KeyError, IndexError, ValueError):
-        raise HTTPException(status_code=502, detail="Unexpected response format from AI service")
+        raise HTTPException(status_code=502, detail="Unexpected response format from AI provider")
 
-    # Save to database
+    # ── Log to database ─────────────────────────────────────────────────────
     db = SessionLocal()
     log_id = None
     try:
-        prompt_str = json.dumps(prompt, indent=2)
         log_record = AILog(
-            endpoint=f"{endpoint_name}_{used_model}", # Log which model answered!
-            prompt=prompt_str,
+            endpoint=f"{endpoint_name}_{used_model}",
+            prompt=json.dumps(prompt, indent=2),
             response=content,
             latency=latency,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
-            total_tokens=total_tokens
+            total_tokens=total_tokens,
         )
         db.add(log_record)
         db.commit()
         db.refresh(log_record)
         log_id = log_record.id
     except Exception as db_err:
-        print(f"Failed to log AI API call to DB: {db_err}")
+        print(f"Failed to log AI call to DB: {db_err}")
     finally:
         db.close()
 
-    # Trigger LLM-as-a-judge quality evaluation
+    # ── Background evaluation ───────────────────────────────────────────────
     if log_id and background_tasks and evaluation_context:
         from app.services.evaluator import evaluate_response_task
         background_tasks.add_task(
@@ -124,57 +281,62 @@ def ai(
             log_id,
             evaluation_context.get("context", ""),
             evaluation_context.get("query", ""),
-            content
+            content,
         )
 
     return content
 
 
-def _parse_json_response(raw: str, context: str) -> any:
-    """Parse a JSON string returned by the AI, raising HTTPException on failure."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _parse_json_response(raw: str, context: str):
+    """Strip markdown fences and parse JSON; raises HTTP 502 on failure."""
     cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         raise HTTPException(
             status_code=502,
-            detail=f"AI returned invalid JSON for {context}: {cleaned[:200]}"
+            detail=f"AI returned invalid JSON for {context}: {cleaned[:200]}",
         )
 
 
-def generate_plan(goal: str, weeks: int) -> list[dict]:
-    """
-    Returns a week-by-week study/action plan for the given goal.
-    Each item: { "week": int, "steps": [str, ...] }
-    """
-    prompt = [
-    {
-        "role": "system",
-        "content": (
-            "You are an elite learning coach who creates razor-sharp, highly specific learning plans. "
-            "Your plans are concrete, measurable, and immediately actionable — never vague or generic. "
-            "Respond ONLY with a valid JSON array. No markdown, no explanation, no extra text whatsoever."
-        ),
-    },
-    {
-        "role": "user",
-        "content": (
-            f"Create a plan with EXACTLY {weeks} week(s) — no more, no less — to achieve: '{goal}'.\n\n"
-            "Rules:\n"
-            f"- The JSON array MUST contain EXACTLY {weeks} element(s).\n"
-            "- Each week must build progressively on the previous one.\n"
-            "- Each step must be specific and immediately actionable (include tools, resources, durations, or metrics where possible).\n"
-            "- Avoid generic advice like 'study more' or 'practice daily' — be precise.\n\n"
-            "Return a JSON array where each element has:\n"
-            '  "week": week number as integer (1-indexed)\n'
-            '  "steps": array of exactly 3 specific, practical, measurable tasks (strings)\n\n'
-            f"Example format for {weeks} week(s):\n"
-            + str([{"week": i, "steps": ["Specific task with tool/metric", "Specific task with milestone", "Specific task with outcome"]} for i in range(1, weeks + 1)])
-        ),
-    },
-]
+# ---------------------------------------------------------------------------
+# Feature functions — prompts unchanged, just use the new ai() above
+# ---------------------------------------------------------------------------
 
-    raw = ai(prompt, endpoint_name="generate_plan")
+def generate_plan(goal: str, weeks: int) -> list[dict]:
+    """Week-by-week study/action plan."""
+    prompt = [
+        {
+            "role": "system",
+            "content": (
+                "You are an elite learning coach who creates razor-sharp, highly specific learning plans. "
+                "Your plans are concrete, measurable, and immediately actionable — never vague or generic. "
+                "Respond ONLY with a valid JSON array. No markdown, no explanation, no extra text whatsoever."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"Create a plan with EXACTLY {weeks} week(s) — no more, no less — to achieve: '{goal}'.\n\n"
+                "Rules:\n"
+                f"- The JSON array MUST contain EXACTLY {weeks} element(s).\n"
+                "- Each week must build progressively on the previous one.\n"
+                "- Each step must be specific and immediately actionable (include tools, resources, durations, or metrics where possible).\n"
+                "- Avoid generic advice like 'study more' or 'practice daily' — be precise.\n\n"
+                "Return a JSON array where each element has:\n"
+                '  "week": week number as integer (1-indexed)\n'
+                '  "steps": array of exactly 3 specific, practical, measurable tasks (strings)\n\n'
+                f"Example format for {weeks} week(s):\n"
+                + str([{"week": i, "steps": ["Specific task with tool/metric", "Specific task with milestone", "Specific task with outcome"]} for i in range(1, weeks + 1)])
+            ),
+        },
+    ]
+
+    raw  = ai(prompt, endpoint_name="generate_plan")
     plan = _parse_json_response(raw, "generate_plan")
 
     if not isinstance(plan, list) or len(plan) == 0:
@@ -183,21 +345,15 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
     for item in plan:
         if "week" not in item or "steps" not in item:
             raise HTTPException(status_code=502, detail="AI plan is missing required fields")
-        item["week"] = int(item["week"])
+        item["week"]  = int(item["week"])
         item["steps"] = [str(s) for s in item["steps"]]
 
     return plan
 
 
 def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
-    """
-    Generate notes from either a topic keyword or actual PDF/document content.
-    When is_pdf=True, query contains the raw extracted text — we mine it deeply.
-    When is_pdf=False, query is a topic name — we generate comprehensive study notes.
-    """
-
+    """Generate exam-ready notes from a keyword topic or raw PDF text."""
     if is_pdf:
-        # PDF / raw content path — extract real knowledge from the actual material
         prompt = [
             {
                 "role": "system",
@@ -240,7 +396,6 @@ def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
             },
         ]
     else:
-        # Keyword/topic path — generate deep, comprehensive notes on the subject
         prompt = [
             {
                 "role": "system",
@@ -279,10 +434,7 @@ def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
 
 
 def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
-    """
-    Returns AI-generated MCQs on the topic with randomised correct answer positions
-    to prevent all answers clustering on one option.
-    """
+    """AI-generated MCQs with shuffled correct-answer positions."""
     prompt = [
         {
             "role": "system",
@@ -308,7 +460,7 @@ def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
         },
     ]
 
-    raw = ai(prompt, endpoint_name="generate_questions")
+    raw       = ai(prompt, endpoint_name="generate_questions")
     questions = _parse_json_response(raw, "generate_questions")
 
     if not isinstance(questions, list) or len(questions) == 0:
@@ -322,64 +474,49 @@ def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
             raise HTTPException(status_code=502, detail="AI question does not have exactly 4 options")
 
         question_text = str(q["question"])
-        options = [str(o) for o in q["options"]]
-        correct_text = str(q["correct_answer"])
+        options       = [str(o) for o in q["options"]]
+        correct_text  = str(q["correct_answer"])
 
-        # Find the correct option (flexible matching)
-        matched_correct = None
-        for opt in options:
-            if opt == correct_text or opt.startswith(correct_text) or correct_text.startswith(opt):
-                matched_correct = opt
-                break
+        matched_correct = next(
+            (o for o in options if o == correct_text or o.startswith(correct_text) or correct_text.startswith(o)),
+            correct_text,
+        )
 
-        if matched_correct is None:
-            # fallback: just use correct_text as-is if no match
-            matched_correct = correct_text
-
-        # --- KEY FIX: shuffle options so correct answer isn't always same position ---
         random.shuffle(options)
 
-        # Ensure matched_correct is actually in shuffled options
         if matched_correct not in options:
-            # Replace a random non-correct slot with the correct answer
             options[random.randint(0, 3)] = matched_correct
 
-        # Label with A/B/C/D after shuffling
         labelled_options = [f"Option {chr(65+i)}: {opt}" for i, opt in enumerate(options)]
-        correct_label = None
-        for i, opt in enumerate(options):
-            if opt == matched_correct:
-                correct_label = f"Option {chr(65+i)}: {opt}"
-                break
+        correct_label    = next(
+            (f"Option {chr(65+i)}: {opt}" for i, opt in enumerate(options) if opt == matched_correct),
+            labelled_options[0],
+        )
 
         processed.append({
-            "question": question_text,
-            "options": labelled_options,
-            "correct_answer": correct_label or labelled_options[0],
+            "question":      question_text,
+            "options":       labelled_options,
+            "correct_answer": correct_label,
         })
 
     return processed
 
 
 def generate_weak_topic_review(weak_topics: list[str], score: int = None, total: int = None) -> str:
-    """
-    Returns a detailed, personalised improvement plan for the student's weak topics.
-    Much higher quality than before — specific, actionable, not generic.
-    """
+    """Personalised improvement plan for the student's weak topics."""
     if not weak_topics:
         return (
             "Excellent work! You answered every question correctly. "
             "To push further, try increasing the difficulty level or exploring advanced subtopics."
         )
 
-    unique_topics = list(dict.fromkeys(weak_topics))  # deduplicated, order-preserving
-    score_context = ""
-    if score is not None and total is not None:
-        score_context = f"The student scored {score}% ({total - len(unique_topics)}/{total} correct). "
-
-    # Pick the single highest-priority topic to focus on
+    unique_topics  = list(dict.fromkeys(weak_topics))
+    score_context  = (
+        f"The student scored {score}% ({total - len(unique_topics)}/{total} correct). "
+        if score is not None and total is not None else ""
+    )
     priority_topic = unique_topics[0]
-    other_topics = unique_topics[1:4]  # show at most 3 others
+    other_topics   = unique_topics[1:4]
 
     prompt = [
         {
