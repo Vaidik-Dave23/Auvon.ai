@@ -2,18 +2,25 @@
 # 🔐 ENV FILES
 # ======================
 .env
+.env.*
+!.env.example
+cloudrun.env
 Backend/.env
+Backend/cloudrun.env
 
 # ======================
 # 🐍 PYTHON (BACKEND)
 # ======================
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
 
-# Virtual environment
+# Virtual environments
 Backend/.venv/
+.venv/
 venv/
 env/
 
@@ -23,25 +30,42 @@ env/
 frontend/node_modules/
 node_modules/
 
-# Build output
 frontend/dist/
 dist/
 
 # ======================
-# 🧠 IDE / SYSTEM FILES
+# 🐳 DOCKER
+# ======================
+*.tar
+
+# ======================
+# 💻 IDE / SYSTEM
 # ======================
 .vscode/
 .idea/
+.history/
+
 .DS_Store
 Thumbs.db
 
 # ======================
-# 📁 TEMP / LOG FILES
+# 📝 LOGS
 # ======================
 *.log
+
+# ======================
+# DATABASE
+# ======================
 *.sqlite3
 
 # ======================
-# 🚀 OTHER
+# TESTS / COVERAGE
 # ======================
 coverage/
+
+# ======================
+# CLOUD
+# ======================
+service-account.json
+*.pem
+*.key
