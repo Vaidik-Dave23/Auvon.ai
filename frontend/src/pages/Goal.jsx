@@ -23,7 +23,7 @@ function Goals() {
     fetchGoals();
   }, []);
 
-  // 🎉 CONFETTI
+  // CONFETTI
   useEffect(() => {
     goals.forEach((goal) => {
       let total = 0;
@@ -50,7 +50,7 @@ function Goals() {
     setGenerating(true);
 
     try {
-      await api.post(`/goals/ai?title=${title}&weeks=${weeks}`);
+      await api.post(`/goals/ai?title=${encodeURIComponent(title)}&weeks=${weeks}`);
       setTitle("");
       fetchGoals();
     } catch (err) {
@@ -82,74 +82,55 @@ function Goals() {
   };
 
   return (
-    <div className="min-h-screen bg-base p-6 flex gap-6">
-
-      {/* 🔥 SIDEBAR */}
+    <div className="min-h-screen bg-page flex text-text-primary font-sans">
       <Sidebar />
 
-      {/* 🔥 MAIN CONTENT */}
-      <div className="flex-1 animate-fade-in">
-
-        <header className="mb-8">
-          <h1 className="text-4xl font-bold text-textMain tracking-tight mb-2">Learning Goals</h1>
-          <p className="text-textMuted">Create personalized learning plans with AI guidance to achieve your academic goals.</p>
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 h-screen overflow-y-auto p-8 flex flex-col gap-8 animate-fade-in">
+        <header className="flex flex-col gap-1">
+          <h1 className="font-serif text-3xl font-semibold text-text-primary">
+            Learning Goals
+          </h1>
+          <p className="text-text-secondary text-sm">
+            Create personalized learning plans with AI guidance to achieve your academic goals.
+          </p>
         </header>
 
-        {/* CREATE GOAL */}
-        <div className="glass-panel p-6 rounded-2xl mb-8 flex flex-col md:flex-row gap-4 items-center">
-          <div className="flex-1 w-full relative">
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleCreateGoal()}
-              placeholder="What subject or skill do you want to master?"
-              className="w-full px-4 py-3 rounded-xl bg-cardHover border border-white/5 focus:border-accent/50 outline-none transition-colors text-textMain placeholder:text-textMuted/50"
-            />
-          </div>
+        {/* CREATE GOAL PANEL */}
+        <div className="bg-surface-alt border border-border p-6 rounded-xl flex flex-col md:flex-row gap-4 items-center">
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreateGoal()}
+            placeholder="What subject or skill do you want to master?"
+            className="flex-1 w-full px-4 py-2.5 rounded-lg bg-input border border-border text-text-primary placeholder:text-text-tertiary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-sm font-sans"
+          />
 
-          <div className="flex gap-4 w-full md:w-auto">
-            <div className="flex items-center gap-2 bg-cardHover px-4 py-1 rounded-xl border border-white/5">
-              <span className="text-textMuted text-sm font-medium">Weeks:</span>
+          <div className="flex gap-4 w-full md:w-auto flex-shrink-0">
+            <div className="flex items-center gap-2 bg-input px-3 py-1.5 rounded-lg border border-border">
+              <span className="text-text-tertiary text-xs font-semibold uppercase">Weeks:</span>
               <input
                 type="number"
                 min="1"
                 max="12"
                 value={weeks}
                 onChange={(e) => setWeeks(parseInt(e.target.value) || 1)}
-                className="w-12 py-2 bg-transparent outline-none text-textMain font-semibold text-center"
+                className="w-10 py-0.5 bg-transparent outline-none text-text-primary font-semibold text-center text-sm font-sans"
               />
             </div>
 
             <button
               onClick={handleCreateGoal}
-              disabled={generating}
-              className={`text-white px-8 py-3 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 min-w-[160px] shadow-lg ${
-                generating ? "bg-cardHover text-textMuted cursor-not-allowed border border-white/5" : "bg-gradient-to-r from-accent to-accentHover hover:scale-105 hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] active:scale-95"
-              }`}
+              disabled={generating || !title.trim()}
+              className="bg-control text-text-primary border border-border hover:bg-black/40 px-6 py-2.5 rounded-lg font-sans font-semibold text-sm transition-all focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50 disabled:cursor-not-allowed min-w-[150px]"
             >
-              {generating ? (
-                <>
-                  <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Planning...
-                </>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                  </svg>
-                  Generate Study Plan
-                </>
-              )}
+              {generating ? "Planning..." : "Generate study plan"}
             </button>
           </div>
         </div>
 
-        {/* GOALS */}
+        {/* LIST OF GOALS */}
         <div className="space-y-8">
-
           {goals.map((goal) => {
             let total = 0;
             let done = 0;
@@ -162,23 +143,21 @@ function Goals() {
             const percent = total ? Math.floor((done / total) * 100) : 0;
 
             return (
-              <div key={goal.id} className="glass-panel p-8 rounded-3xl relative overflow-hidden group border-white/5">
+              <div key={goal.id} className="bg-surface border border-border p-6 rounded-xl flex flex-col gap-6 relative">
                 
-                {/* Background Glow */}
-                <div className="absolute top-0 right-0 w-64 h-64 bg-accent/5 rounded-full blur-3xl -z-10 group-hover:bg-accent/10 transition-colors duration-700 pointer-events-none" />
-
-                <div className="flex justify-between items-start mb-6">
+                <div className="flex justify-between items-start">
                   <div>
-                    <h2 className="text-2xl font-bold text-textMain mb-1">{goal.title}</h2>
-                    <p className="text-sm font-medium text-textMuted flex items-center gap-2">
-                      <span className={percent === 100 ? "text-success font-bold" : "text-accent font-bold"}>{percent}% complete</span>
-                      • {done} of {total} tasks
+                    <h2 className="font-serif text-2xl font-medium text-text-primary">
+                      {goal.title}
+                    </h2>
+                    <p className="text-xs font-semibold text-text-tertiary mt-2">
+                      <span className={percent === 100 ? "text-success" : "text-accent"}>{percent}% complete</span> • {done} of {total} tasks
                     </p>
                   </div>
 
                   <button
                     onClick={() => deleteGoal(goal.id)}
-                    className="text-textMuted hover:text-error p-2 rounded-lg hover:bg-error/10 transition-colors"
+                    className="text-text-tertiary hover:text-danger p-2 hover:bg-danger/10 rounded transition-colors"
                     title="Delete Goal"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -187,36 +166,37 @@ function Goals() {
                   </button>
                 </div>
 
-                {/* PROGRESS */}
-                <div className="bg-cardHover h-4 rounded-full overflow-hidden mb-8 border border-black/20">
+                {/* PROGRESS BAR */}
+                <div className="bg-surface-alt h-1 rounded-full overflow-hidden border border-border-subtle">
                   <div
-                    className="h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(139,92,246,0.5)] bg-gradient-to-r from-accent to-accentHover"
-                    style={{
-                      width: `${percent}%`,
-                      minWidth: percent > 0 ? "1%" : "0%"
-                    }}
+                    className="bg-accent h-full rounded-full transition-all duration-1000 ease-out"
+                    style={{ width: `${percent}%` }}
                   />
                 </div>
 
-                {/* WEEKS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-10">
+                {/* WEEKS GRID */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                   {Object.entries(goal.weeks).map(([week, steps]) => (
-                    <div key={week} className="bg-card/50 p-5 rounded-2xl border border-white/5 hover:border-white/10 transition-colors">
-                      <h3 className="font-bold text-lg mb-4 text-accent flex items-center gap-2">
-                        <span className="bg-accent/20 text-accentHover px-2 py-1 rounded text-sm">W{week}</span>
+                    <div key={week} className="bg-surface-alt p-5 rounded-lg border border-border-subtle flex flex-col gap-4">
+                      <h3 className="font-serif text-base font-semibold text-text-primary flex items-center gap-2">
+                        <span className="bg-accent/10 text-accent text-xs font-semibold px-2 py-0.5 rounded">
+                          W{week}
+                        </span>
                         Week {week}
                       </h3>
 
-                      <div className="space-y-3">
+                      <div className="space-y-3.5">
                         {steps.map((step) => (
-                          <label key={step.id} className="flex items-start gap-3 cursor-pointer group/item">
+                          <label key={step.id} className="flex items-start gap-3 cursor-pointer group">
                             <input
                               type="checkbox"
                               checked={step.done}
                               onChange={() => toggleStep(step.id)}
-                              className="mt-1 w-5 h-5 rounded border-gray-600 text-accent focus:ring-accent focus:ring-offset-card bg-base cursor-pointer flex-shrink-0"
+                              className="mt-0.5 w-4 h-4 rounded border-border bg-input text-accent focus:ring-accent cursor-pointer flex-shrink-0"
                             />
-                            <span className={`text-sm leading-relaxed transition-all duration-300 ${step.done ? "line-through text-textMuted" : "text-textMain group-hover/item:text-white"}`}>
+                            <span className={`text-sm font-sans leading-relaxed transition-colors duration-200 ${
+                              step.done ? "line-through text-text-tertiary" : "text-text-secondary group-hover:text-text-primary"
+                            }`}>
                               {step.text}
                             </span>
                           </label>
@@ -230,16 +210,13 @@ function Goals() {
           })}
 
           {goals.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 opacity-50">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 mb-4 text-textMuted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
-              <p className="text-lg font-medium text-textMuted">No goals yet. Start planning above!</p>
+            <div className="text-center py-20 border border-dashed border-border rounded-xl">
+              <p className="text-sm text-text-tertiary italic">
+                No goals yet. Start planning above!
+              </p>
             </div>
           )}
-
         </div>
-
       </div>
     </div>
   );

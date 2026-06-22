@@ -58,14 +58,14 @@ function VerifyEmail() {
         navigate("/dashboard");
       }, 1500);
     } catch (err) {
-      setError(err.response?.data?.detail || "Verification failed. Please try again.");
+      setError(err.response?.data?.detail || "Invalid or expired code. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
   const handleResend = async () => {
-    if (cooldown > 0) return;
+    if (cooldown > 0 || resending) return;
 
     setResending(true);
     setError("");
@@ -74,7 +74,7 @@ function VerifyEmail() {
     try {
       await api.post("/resend-verification");
       setMessage("Verification code resent successfully!");
-      setCooldown(60); // 60 seconds cooldown
+      setCooldown(30); // 30 seconds cooldown as specified in Plan v2
     } catch (err) {
       setError(err.response?.data?.detail || "Failed to resend code.");
     } finally {
@@ -89,48 +89,52 @@ function VerifyEmail() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-base relative overflow-hidden text-textMain px-4">
-      {/* Ambient Background Glows */}
-      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-accent/20 rounded-full blur-[120px] pointer-events-none animate-pulse-glow" />
-      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[120px] pointer-events-none animate-pulse-glow" style={{ animationDelay: '1s' }} />
-
-      <div className="glass-panel border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-3xl p-10 w-full max-w-md animate-fade-in relative z-10 mx-4">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-accent to-accentHover mb-3 tracking-tight">
-            Verify Your Email
+    <div className="min-h-screen bg-page flex items-center justify-center p-6 text-text-primary">
+      <div className="bg-surface border border-border w-full max-w-[420px] p-8 rounded-xl flex flex-col gap-6 shadow-lg animate-fade-in">
+        <div className="text-center">
+          <h1 className="font-serif text-2xl font-semibold mb-2">
+            Check your email
           </h1>
-          <p className="text-textMuted font-medium mb-1">We sent a 6-digit verification code to:</p>
-          <p className="text-accent font-semibold break-all">{userEmail || "your email address"}</p>
+          <p className="text-text-secondary text-sm">
+            We sent a 6-digit verification code to
+          </p>
+          <p className="text-text-primary font-medium text-sm break-all mt-1">
+            {userEmail || "your email address"}
+          </p>
         </div>
 
-        <form onSubmit={handleVerify} className="flex flex-col gap-6">
-          <div className="space-y-4">
-            <div className="relative flex flex-col items-center">
-              <input
-                type="text"
-                maxLength={6}
-                placeholder="000000"
-                value={code}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/[^0-9]/g, "");
-                  setCode(val);
-                }}
-                className="w-full text-center tracking-[0.5em] text-3xl font-bold bg-cardHover/50 border border-white/10 text-textMain placeholder:text-textMuted/30 p-4 rounded-xl focus:outline-none focus:border-accent/50 focus:bg-white/5 transition-all"
-                required
-                disabled={loading}
-              />
-              <p className="text-xs text-textMuted mt-2">Enter the 6-digit OTP code.</p>
-            </div>
+        <form onSubmit={handleVerify} className="flex flex-col gap-5">
+          <div className="flex flex-col items-center">
+            <input
+              type="text"
+              maxLength={6}
+              placeholder="000000"
+              value={code}
+              onChange={(e) => {
+                const val = e.target.value.replace(/[^0-9]/g, "");
+                setCode(val);
+                if (error) setError("");
+              }}
+              className={`w-full text-center tracking-[0.5em] text-3xl font-bold bg-input border ${
+                error ? "border-danger" : "border-border"
+              } text-text-primary placeholder:text-text-tertiary/30 p-4 rounded-lg focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all`}
+              required
+              disabled={loading}
+              autoFocus
+            />
+            <p className="text-xs text-text-tertiary mt-2">
+              Enter the 6-digit OTP code.
+            </p>
           </div>
 
           {error && (
-            <div className="p-3 bg-error/10 border border-error/20 text-error rounded-xl text-sm font-medium text-center animate-shake">
+            <div className="text-sm text-danger font-medium text-center animate-fade-in">
               {error}
             </div>
           )}
 
           {message && (
-            <div className="p-3 bg-success/10 border border-success/20 text-success rounded-xl text-sm font-medium text-center">
+            <div className="text-sm text-success font-medium text-center animate-fade-in">
               {message}
             </div>
           )}
@@ -138,49 +142,48 @@ function VerifyEmail() {
           <button
             type="submit"
             disabled={loading || code.length !== 6}
-            className={`w-full py-4 rounded-xl font-bold text-lg text-white transition-all duration-300 flex items-center justify-center gap-2 ${
-              loading || code.length !== 6
-                ? "bg-cardHover text-textMuted cursor-not-allowed border border-white/5"
-                : "bg-gradient-to-r from-accent to-accentHover hover:scale-[1.02] active:scale-95 shadow-[0_0_20px_rgba(139,92,246,0.3)] hover:shadow-[0_0_30px_rgba(139,92,246,0.5)]"
+            className={`w-full bg-control hover:bg-black/40 text-text-primary border border-border py-3 rounded-lg font-sans font-semibold transition-all flex items-center justify-center gap-2 ${
+              loading || code.length !== 6 ? "opacity-50 cursor-not-allowed" : ""
             }`}
           >
             {loading ? (
               <>
-                <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg className="animate-spin h-5 w-5 text-text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
                 Verifying...
               </>
-            ) : "Verify Account"}
+            ) : (
+              "Verify Account"
+            )}
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-white/5 flex flex-col items-center gap-4">
-          <div className="flex items-center gap-2">
-            <span className="text-textMuted text-sm">Didn't receive the code?</span>
-            <button
-              type="button"
-              onClick={handleResend}
-              disabled={resending || cooldown > 0}
-              className={`font-semibold text-sm transition-colors ${
-                cooldown > 0 || resending
-                  ? "text-textMuted cursor-not-allowed"
-                  : "text-accent hover:text-accentHover hover:underline"
-              }`}
-            >
-              {resending ? "Resending..." : cooldown > 0 ? `Resend in ${cooldown}s` : "Resend Code"}
-            </button>
+        <div className="pt-4 border-t border-border flex flex-col items-center gap-4">
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-text-tertiary">Didn't get a code?</span>
+            {cooldown > 0 ? (
+              <span className="text-text-tertiary font-medium">
+                Resend in {cooldown}s
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resending}
+                className="text-accent font-semibold hover:underline transition-colors focus:outline-none"
+              >
+                {resending ? "Resending..." : "Resend Code"}
+              </button>
+            )}
           </div>
 
           <button
             type="button"
             onClick={handleLogout}
-            className="text-textMuted text-sm hover:text-white transition-colors flex items-center gap-2 hover:underline"
+            className="text-text-tertiary text-xs hover:text-text-primary transition-colors flex items-center gap-1 hover:underline focus:outline-none"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
             Sign in with a different account
           </button>
         </div>

@@ -7,27 +7,45 @@ function Dashboard() {
   const [tasks, setTasks] = useState([]);
   const [daily, setDaily] = useState(null);
   const [goals, setGoals] = useState([]);
+  const [user, setUser] = useState(null);
+  const [lastScore, setLastScore] = useState("—");
 
   const [newTask, setNewTask] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editText, setEditText] = useState("");
 
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [taskError, setTaskError] = useState("");
+
   const navigate = useNavigate();
 
-  // 🔥 FETCH DATA
+  // Fetch all initial data
   const fetchData = async () => {
     try {
-      const [tasksRes, dailyRes, goalsRes] = await Promise.all([
+      const [tasksRes, dailyRes, goalsRes, userRes, testsRes] = await Promise.all([
         api.get("/tasks"),
         api.get("/progress/daily"),
         api.get("/progress/goals"),
+        api.get("/me").catch(() => null),
+        api.get("/tests").catch(() => ({ data: [] }))
       ]);
 
       setTasks(tasksRes.data);
       setDaily(dailyRes.data);
       setGoals(goalsRes.data);
+      if (userRes) setUser(userRes.data);
+
+      if (testsRes && testsRes.data.length > 0) {
+        // Sort by creation or test_id desc
+        const sortedTests = testsRes.data.sort((a, b) => b.test_id - a.test_id);
+        setLastScore(`${sortedTests[0].score}%`);
+      } else {
+        setLastScore("—");
+      }
     } catch (err) {
-      console.log(err);
+      console.error(err);
+    } finally {
+      setTasksLoading(false);
     }
   };
 
@@ -35,40 +53,58 @@ function Dashboard() {
     fetchData();
   }, []);
 
-  // 🔥 ADD TASK
+  // ADD TASK
   const handleAddTask = async () => {
     if (!newTask.trim()) return;
+    setTaskError("");
 
     try {
-      await api.post(`/tasks?title=${newTask}`);
+      await api.post(`/tasks?title=${encodeURIComponent(newTask)}`);
       setNewTask("");
-      fetchData();
+      // Refresh task list & stats
+      const [tasksRes, dailyRes] = await Promise.all([
+        api.get("/tasks"),
+        api.get("/progress/daily")
+      ]);
+      setTasks(tasksRes.data);
+      setDaily(dailyRes.data);
     } catch (err) {
-      console.log(err);
+      console.error(err);
+      setTaskError("Failed to add task.");
     }
   };
 
-  // 🔥 TOGGLE
+  // TOGGLE TASK
   const toggleTask = async (id) => {
     try {
       await api.put(`/tasks/${id}`);
-      fetchData();
+      const [tasksRes, dailyRes] = await Promise.all([
+        api.get("/tasks"),
+        api.get("/progress/daily")
+      ]);
+      setTasks(tasksRes.data);
+      setDaily(dailyRes.data);
     } catch (err) {
-      console.log(err);
+      console.error(err);
     }
   };
 
-  // 🔥 DELETE
+  // DELETE TASK
   const deleteTask = async (id) => {
     try {
       await api.delete(`/tasks/${id}`);
-      fetchData();
+      const [tasksRes, dailyRes] = await Promise.all([
+        api.get("/tasks"),
+        api.get("/progress/daily")
+      ]);
+      setTasks(tasksRes.data);
+      setDaily(dailyRes.data);
     } catch (err) {
-      console.log(err);
+      console.error(err);
     }
   };
 
-  // 🔥 EDIT
+  // EDIT TASK
   const startEdit = (task) => {
     setEditingId(task.id);
     setEditText(task.title);
@@ -76,197 +112,226 @@ function Dashboard() {
 
   const saveEdit = async (id) => {
     try {
-      await api.put(`/tasks/${id}/edit?title=${editText}`);
+      await api.put(`/tasks/${id}/edit?title=${encodeURIComponent(editText)}`);
       setEditingId(null);
-      fetchData();
+      const tasksRes = await api.get("/tasks");
+      setTasks(tasksRes.data);
     } catch (err) {
-      console.log(err);
+      console.error(err);
     }
   };
 
-  // 🔥 LOGOUT
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    navigate("/");
+  // Get active goal title for stats card
+  const getActiveGoalName = () => {
+    if (goals.length > 0) {
+      // Find goal with lowest progress < 100
+      const active = goals.find(g => g.progress < 100) || goals[0];
+      return active.title;
+    }
+    return "None Active";
+  };
+
+  // Format today's date: e.g. "Saturday, 22 June"
+  const getFormattedDate = () => {
+    const options = { weekday: 'long', day: 'numeric', month: 'long' };
+    return new Date().toLocaleDateString('en-US', options);
   };
 
   return (
-    <div className="min-h-screen bg-base p-6 flex gap-6">
+    <div className="min-h-screen bg-page flex text-text-primary font-sans">
       <Sidebar />
 
-      {/* MAIN */}
-      <div className="flex-1 flex flex-col gap-8 animate-fade-in">
-        <header className="mb-2">
-          <h1 className="text-4xl font-bold text-textMain tracking-tight">Learning Dashboard</h1>
-          <p className="text-textMuted mt-1">Welcome back. Here's your progress.</p>
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-1 h-screen overflow-y-auto p-8 flex flex-col gap-8 animate-fade-in">
+        <header className="flex flex-col gap-1">
+          <p className="text-xs text-text-tertiary font-semibold uppercase tracking-wider">
+            {getFormattedDate()}
+          </p>
+          <h1 className="font-serif text-3xl font-semibold text-text-primary">
+            Good morning, {user?.name || "Student"}
+          </h1>
         </header>
 
-        {/* 🔥 STATS (DAILY ONLY) */}
-        <div className="grid grid-cols-3 gap-6">
-          <div className="glass-panel p-6 rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] flex flex-col justify-center items-center">
-            <h2 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-accent to-accentHover mb-2">
-              {daily?.done ?? 0}
-            </h2>
-            <p className="text-textMuted font-medium text-sm tracking-wide uppercase">tasks done</p>
+        {/* STATS ROW (Mockup Style: Single container with borders and split cells) */}
+        <div className="bg-surface border border-border rounded-xl flex w-full divide-x divide-border">
+          <div className="flex-1 p-6 flex flex-col gap-1">
+            <span className="text-text-tertiary text-xs font-semibold uppercase tracking-wider">
+              Tasks done today
+            </span>
+            <span className="text-4xl font-medium text-text-primary mt-1">
+              {daily?.done ?? 0} <span className="text-text-tertiary text-2xl font-light">/ {daily?.total ?? 0}</span>
+            </span>
           </div>
 
-          <div className="glass-panel p-6 rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] flex flex-col justify-center items-center">
-            <h2 className="text-4xl font-extrabold text-textMain mb-2">
-              {daily?.total ?? 0}
-            </h2>
-            <p className="text-textMuted font-medium text-sm tracking-wide uppercase">total tasks</p>
+          <div className="flex-1 p-6 flex flex-col gap-1 overflow-hidden">
+            <span className="text-text-tertiary text-xs font-semibold uppercase tracking-wider">
+              Active goal
+            </span>
+            <span className="font-serif text-2xl text-text-primary truncate mt-2" title={getActiveGoalName()}>
+              {getActiveGoalName()}
+            </span>
           </div>
 
-          <div className="glass-panel p-6 rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] flex flex-col justify-center items-center">
-            <h2 className="text-4xl font-extrabold text-success mb-2">
-              {daily?.percent ?? 0}%
-            </h2>
-            <p className="text-textMuted font-medium text-sm tracking-wide uppercase">completion</p>
+          <div className="flex-1 p-6 flex flex-col gap-1">
+            <span className="text-text-tertiary text-xs font-semibold uppercase tracking-wider">
+              Last test score
+            </span>
+            <span className={`text-4xl font-semibold mt-1 ${lastScore !== "—" ? "text-success" : "text-text-primary"}`}>
+              {lastScore}
+            </span>
           </div>
         </div>
 
-        {/* 🔥 MAIN GRID */}
-        <div className="grid grid-cols-2 gap-6">
+        {/* LOWER SECTION GRID */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* TODAY'S TASKS PANEL */}
+          <div className="bg-surface border border-border rounded-xl p-6 flex flex-col">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="font-serif text-xl font-medium text-text-primary">
+                Today's tasks
+              </h2>
+              <span className="text-xs font-semibold text-text-tertiary font-sans">
+                {daily?.done ?? 0} of {daily?.total ?? 0}
+              </span>
+            </div>
 
-          {/* TASKS */}
-          <div className="glass-panel p-6 rounded-2xl flex flex-col">
-            <h3 className="font-semibold text-lg mb-5 text-textMain flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-              </svg>
-              Today's Tasks
-            </h3>
-
-            {/* ADD */}
-            <div className="flex gap-3 mb-6">
+            {/* TASK INPUT ROW */}
+            <div className="flex gap-2 mb-6">
               <input
                 value={newTask}
-                onChange={(e) => setNewTask(e.target.value)}
+                onChange={(e) => {
+                  setNewTask(e.target.value);
+                  if (taskError) setTaskError("");
+                }}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-                placeholder="What needs to be done?"
-                className="flex-1 px-4 py-3 rounded-xl bg-cardHover border border-white/5 focus:border-accent/50 outline-none transition-colors text-textMain placeholder:text-textMuted/50"
+                placeholder="Add a task for today..."
+                className={`flex-1 px-4 py-2.5 rounded-lg bg-input border ${
+                  taskError ? "border-danger" : "border-border"
+                } text-text-primary placeholder:text-text-tertiary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-sm font-sans`}
               />
               <button
                 onClick={handleAddTask}
-                className="bg-gradient-to-r from-accent to-accentHover text-white px-5 rounded-xl font-medium transition-all hover:scale-105 hover:shadow-[0_0_15px_rgba(139,92,246,0.3)] active:scale-95"
+                className="bg-control text-text-primary border border-border hover:bg-black/40 px-5 py-2.5 rounded-lg font-sans font-semibold text-sm transition-all focus:outline-none focus:ring-1 focus:ring-accent"
               >
-                Add Task
+                Add
               </button>
             </div>
 
-            {/* LIST */}
-            <div className="space-y-3 overflow-y-auto pr-2 max-h-[400px]">
-              {tasks.map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center justify-between gap-3 p-4 rounded-xl bg-card border border-white/5 hover:border-white/10 hover:bg-cardHover transition-all group"
-                >
+            {taskError && (
+              <p className="text-xs text-danger font-medium mb-4 flex items-center gap-2">
+                {taskError}{" "}
+                <button onClick={handleAddTask} className="text-accent hover:underline font-semibold">
+                  Retry
+                </button>
+              </p>
+            )}
 
-                  <div className="flex items-center gap-4 flex-1">
-                    <input
-                      type="checkbox"
-                      checked={task.done}
-                      onChange={() => toggleTask(task.id)}
-                      className="w-5 h-5 rounded border-gray-600 text-accent focus:ring-accent focus:ring-offset-base bg-base cursor-pointer"
-                    />
-
-                    {editingId === task.id ? (
+            {/* TASKS LIST */}
+            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+              {tasksLoading ? (
+                // Tasks Skeleton Loader
+                Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="h-14 rounded-lg bg-surface-alt border border-border-subtle animate-pulse flex items-center px-4" />
+                ))
+              ) : (
+                tasks.map((task) => (
+                  <div
+                    key={task.id}
+                    className="flex items-center justify-between gap-3 p-4 rounded-lg bg-surface-alt border border-border-subtle hover:border-border transition-all group"
+                  >
+                    <div className="flex items-center gap-3 flex-1 overflow-hidden">
                       <input
-                        value={editText}
-                        onChange={(e) => setEditText(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && saveEdit(task.id)}
-                        className="px-3 py-1 rounded bg-base border border-accent outline-none w-full"
-                        autoFocus
+                        type="checkbox"
+                        checked={task.done}
+                        onChange={() => toggleTask(task.id)}
+                        className="w-5 h-5 rounded border-border bg-input text-accent focus:ring-accent cursor-pointer flex-shrink-0"
                       />
-                    ) : (
-                      <span
-                        className={`text-base transition-all duration-300 ${task.done ? "line-through text-textMuted" : "text-textMain"}`}
-                      >
-                        {task.title}
-                      </span>
-                    )}
-                  </div>
 
-                  {/* ACTIONS */}
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    {editingId === task.id ? (
+                      {editingId === task.id ? (
+                        <input
+                          value={editText}
+                          onChange={(e) => setEditText(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && saveEdit(task.id)}
+                          className="px-3 py-1 rounded bg-input border border-accent text-text-primary text-sm font-sans outline-none w-full"
+                          autoFocus
+                        />
+                      ) : (
+                        <span
+                          className={`text-sm font-sans transition-all duration-300 truncate ${
+                            task.done ? "line-through text-text-tertiary" : "text-text-primary"
+                          }`}
+                        >
+                          {task.title}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* ACTIONS */}
+                    <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-xs">
+                      {editingId === task.id ? (
+                        <button
+                          onClick={() => saveEdit(task.id)}
+                          className="text-success font-semibold hover:underline"
+                        >
+                          Save
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => startEdit(task)}
+                          className="text-accent font-semibold hover:underline"
+                        >
+                          Edit
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => saveEdit(task.id)}
-                        className="text-success hover:scale-110 transition"
+                        onClick={() => deleteTask(task.id)}
+                        className="text-danger font-semibold hover:underline"
                       >
-                        Save
+                        Delete
                       </button>
-                    ) : (
-                      <button
-                        onClick={() => startEdit(task)}
-                        className="text-accent hover:text-accentHover hover:scale-110 transition"
-                      >
-                        Edit
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => deleteTask(task.id)}
-                      className="text-error hover:text-red-400 hover:scale-110 transition"
-                    >
-                      Delete
-                    </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              )}
 
-              {tasks.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-10 opacity-50">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mb-3 text-textMuted" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                  </svg>
-                  <p className="text-sm text-textMuted">You have no tasks for today.</p>
+              {!tasksLoading && tasks.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <p className="text-sm text-text-tertiary font-sans">
+                    Nothing planned yet — add your first task above.
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* PROGRESS */}
-          <div className="glass-panel p-6 rounded-2xl flex flex-col">
-            <h3 className="font-semibold text-lg mb-6 text-textMain flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
-              Track Progress
-            </h3>
+          {/* PROGRESS PANEL */}
+          <div className="bg-surface border border-border rounded-xl p-6 flex flex-col gap-6">
+            <h2 className="font-serif text-xl font-medium text-text-primary mb-2">
+              Progress
+            </h2>
 
-            {/* DAILY */}
-            <div className="mb-8 bg-cardHover p-5 rounded-xl border border-white/5">
-              <div className="flex justify-between items-center mb-3">
-                <p className="font-medium">Daily Goal</p>
-                <p className="text-xs font-semibold text-accent bg-accent/10 px-2 py-1 rounded">
-                  {daily?.done || 0}/{daily?.total || 0} tasks
-                </p>
-              </div>
+            {/* GOALS PROGRESS */}
+            <div className="flex flex-col gap-4">
+              <span className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+                Active Goals
+              </span>
 
-              <div className="bg-base h-3 rounded-full overflow-hidden border border-black/20">
-                <div
-                  className="bg-gradient-to-r from-accent to-accentHover h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(139,92,246,0.5)]"
-                  style={{ width: `${daily?.percent || 0}%` }}
-                />
-              </div>
-            </div>
-
-            {/* GOALS */}
-            <div>
-              <p className="text-sm font-semibold mb-4 text-textMuted uppercase tracking-wider">Active Goals</p>
-
-              <div className="space-y-5 overflow-y-auto pr-2 max-h-[250px]">
+              <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
                 {goals.map((goal) => (
-                  <div key={goal.id} className="group">
-                    <div className="flex justify-between items-end mb-2">
-                      <p className="text-sm font-medium text-textMain truncate pr-4">{goal.title}</p>
-                      <p className="text-xs text-textMuted">{goal.progress}%</p>
+                  <div key={goal.id} className="flex flex-col gap-2">
+                    <div className="flex justify-between items-end text-sm">
+                      <p className="font-medium text-text-primary truncate pr-4">
+                        {goal.title}
+                      </p>
+                      <span className="text-text-tertiary text-xs font-medium">
+                        {goal.progress}% complete
+                      </span>
                     </div>
 
-                    <div className="bg-card h-2 rounded-full overflow-hidden border border-white/5">
+                    <div className="bg-surface-alt h-1 rounded-full overflow-hidden border border-border-subtle">
                       <div
-                        className="bg-gradient-to-r from-success to-teal-400 h-full rounded-full transition-all duration-1000 ease-out"
+                        className="bg-accent h-full rounded-full transition-all duration-1000 ease-out"
                         style={{ width: `${goal.progress}%` }}
                       />
                     </div>
@@ -274,14 +339,33 @@ function Dashboard() {
                 ))}
 
                 {goals.length === 0 && (
-                  <p className="text-sm text-textMuted italic">No active long-term goals.</p>
+                  <p className="text-sm text-text-tertiary italic">
+                    No active goals.
+                  </p>
                 )}
               </div>
             </div>
+
+            {/* DAILY TASK GOAL PROGRESS */}
+            <div className="border-t border-border-subtle pt-6 flex flex-col gap-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="font-medium text-text-primary">
+                  Daily task goal
+                </span>
+                <span className="text-text-tertiary text-xs font-medium">
+                  {daily?.done || 0} of {daily?.total || 0} tasks
+                </span>
+              </div>
+
+              <div className="bg-surface-alt h-1 rounded-full overflow-hidden border border-border-subtle">
+                <div
+                  className="bg-accent h-full rounded-full transition-all duration-1000 ease-out"
+                  style={{ width: `${daily?.percent || 0}%` }}
+                />
+              </div>
+            </div>
           </div>
-
         </div>
-
       </div>
     </div>
   );

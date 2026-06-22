@@ -3,15 +3,29 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        base: "rgb(var(--color-base) / <alpha-value>)",
-        card: "rgb(var(--color-card) / <alpha-value>)",
-        cardHover: "rgb(var(--color-card-hover) / <alpha-value>)",
-        accent: "rgb(var(--color-accent) / <alpha-value>)",
-        accentHover: "rgb(var(--color-accent-hover) / <alpha-value>)",
-        success: "rgb(var(--color-success) / <alpha-value>)",
-        error: "rgb(var(--color-error) / <alpha-value>)",
-        textMain: "rgb(var(--color-text-main) / <alpha-value>)",
-        textMuted: "rgb(var(--color-text-muted) / <alpha-value>)",
+        page:        'var(--bg-page)',
+        surface:     'var(--bg-surface)',
+        'surface-alt': 'var(--bg-surface-alt)',
+        sidebar:     'var(--bg-sidebar)',
+        input:       'var(--bg-input)',
+        control:     'var(--bg-control)',
+        border: {
+          DEFAULT: 'var(--border-default)',
+          subtle:  'var(--border-subtle)',
+          dashed:  'var(--border-dashed)',
+        },
+        text: {
+          primary:   'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          tertiary:  'var(--text-tertiary)',
+        },
+        accent:  'var(--accent)',
+        success: 'var(--success)',
+        danger:  'var(--danger)',
+      },
+      fontFamily: {
+        serif: ['var(--font-serif)', 'Georgia', 'serif'],
+        sans:  ['var(--font-sans)', 'system-ui', 'sans-serif'],
       },
       animation: {
         'fade-in': 'fadeIn 0.4s ease-out forwards',
@@ -28,8 +42,8 @@ module.exports = {
           '100%': { opacity: '1', transform: 'translateY(0)' },
         },
         pulseGlow: {
-          '0%, 100%': { boxShadow: '0 0 15px rgba(var(--color-accent), 0.4)' },
-          '50%': { boxShadow: '0 0 25px rgba(var(--color-accent), 0.7)' },
+          '0%, 100%': { boxShadow: '0 0 15px rgba(59, 47, 227, 0.4)' },
+          '50%': { boxShadow: '0 0 25px rgba(59, 47, 227, 0.7)' },
         }
       }
     },

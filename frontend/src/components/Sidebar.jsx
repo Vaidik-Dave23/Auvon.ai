@@ -1,7 +1,6 @@
 import { useNavigate, useLocation } from "react-router-dom";
-import AuvonLogo from "./AuvonLogo";
 
-function Sidebar({ children }) {
+function Sidebar() {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -19,50 +18,40 @@ function Sidebar({ children }) {
   };
 
   return (
-    <div className="flex gap-6 p-6 bg-base min-h-screen">
-
-      {/* SIDEBAR */}
-      <div className="w-64 glass-panel rounded-2xl p-6 flex flex-col animate-slide-up">
-        <div className="flex items-center gap-3 mb-8">
-          <AuvonLogo className="w-10 h-10 drop-shadow-[0_0_15px_rgba(139,92,246,0.5)]" />
-          <h1 className="text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-accent to-accentHover">
-            Auvon.AI
-          </h1>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {menu.map((item) => {
-            const active = location.pathname === item.path;
-
-            return (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`text-left px-4 py-3 rounded-xl transition-all duration-300 font-medium flex items-center gap-3
-                  ${
-                    active
-                      ? "bg-gradient-to-r from-accent to-accentHover text-white shadow-[0_0_15px_rgba(139,92,246,0.3)] scale-[1.02]"
-                      : "text-textMuted hover:text-white hover:bg-white/5"
-                  }`}
-              >
-                {item.name}
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          onClick={handleLogout}
-          className="mt-auto glass-button text-error font-medium px-4 py-3 rounded-xl hover:bg-error/10 hover:text-red-400 transition-colors"
-        >
-          Sign Out
-        </button>
+    <div className="w-64 h-screen bg-sidebar border-r border-border-subtle flex flex-col p-6 sticky top-0 flex-shrink-0 select-none">
+      <div className="flex items-center gap-3 mb-10 px-2">
+        <h1 className="font-serif text-3xl font-semibold text-text-primary">
+          Auvon
+        </h1>
       </div>
 
-      {/* MAIN CONTENT */}
-      <div className="flex-1">
-        {children}
+      <div className="flex flex-col gap-1.5">
+        {menu.map((item) => {
+          const active = location.pathname === item.path;
+
+          return (
+            <button
+              key={item.path}
+              onClick={() => navigate(item.path)}
+              className={`text-left px-4 py-3 rounded-r-md transition-all duration-300 font-sans font-medium flex items-center gap-3 border-l-2 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-offset-1
+                ${
+                  active
+                    ? "bg-surface text-text-primary border-accent"
+                    : "border-transparent text-text-tertiary hover:text-text-primary hover:bg-surface/30"
+                }`}
+            >
+              {item.name}
+            </button>
+          );
+        })}
       </div>
+
+      <button
+        onClick={handleLogout}
+        className="mt-auto text-left px-4 py-3 font-sans font-medium text-text-tertiary hover:text-danger transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent focus-visible:ring-offset-1"
+      >
+        Sign out
+      </button>
     </div>
   );
 }

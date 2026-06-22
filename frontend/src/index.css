@@ -4,53 +4,138 @@
 
 @layer base {
   :root {
-    /* Default Dark Theme */
-    --color-base: 15 23 42; /* slate-900 */
-    --color-card: 30 41 59; /* slate-800 */
-    --color-card-hover: 51 65 85; /* slate-700 */
-    --color-accent: 139 92 246; /* violet-500 */
-    --color-accent-hover: 168 85 247; /* purple-500 */
-    --color-success: 16 185 129; /* emerald-500 */
-    --color-error: 239 68 68; /* red-500 */
-    --color-text-main: 248 250 252; /* slate-50 */
-    --color-text-muted: 148 163 184; /* slate-400 */
+    /* Default Dark Theme / dark-editorial */
+    --bg-page:        #181716;  /* outermost background */
+    --bg-surface:      #232220;  /* cards, panels, content area */
+    --bg-surface-alt:  #1D1C1B;  /* secondary panel, e.g. "new note" sidebar */
+    --bg-sidebar:      #1A1918;  /* nav rail */
+    --bg-input:        #181716;  /* form fields */
+    --bg-control:      #151413;  /* dark action buttons (Generate, Start test) */
+
+    --border-default:  #333230;
+    --border-subtle:   #2E2D2B;
+    --border-dashed:   #3D3C3A;
+
+    --text-primary:    #F5F5F5;
+    --text-secondary:  #B7B6B3;
+    --text-tertiary:   #9E9D9B;
+
+    --accent:          #3B2FE3;
+    --accent-text:     #FFFFFF;
+
+    --success:         #4ADE80;  /* score/correct states only */
+    --danger:           #F87171;  /* error states only */
+
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-sans:  'Inter', system-ui, sans-serif;
+  }
+
+  [data-theme="dark"] {
+    --bg-page:        #181716;
+    --bg-surface:      #232220;
+    --bg-surface-alt:  #1D1C1B;
+    --bg-sidebar:      #1A1918;
+    --bg-input:        #181716;
+    --bg-control:      #151413;
+
+    --border-default:  #333230;
+    --border-subtle:   #2E2D2B;
+    --border-dashed:   #3D3C3A;
+
+    --text-primary:    #F5F5F5;
+    --text-secondary:  #B7B6B3;
+    --text-tertiary:   #9E9D9B;
+
+    --accent:          #3B2FE3;
+    --accent-text:     #FFFFFF;
+
+    --success:         #4ADE80;
+    --danger:           #F87171;
+
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-sans:  'Inter', system-ui, sans-serif;
+  }
+
+  [data-theme="dark-editorial"] {
+    --bg-page:        #181716;
+    --bg-surface:      #232220;
+    --bg-surface-alt:  #1D1C1B;
+    --bg-sidebar:      #1A1918;
+    --bg-input:        #181716;
+    --bg-control:      #151413;
+
+    --border-default:  #333230;
+    --border-subtle:   #2E2D2B;
+    --border-dashed:   #3D3C3A;
+
+    --text-primary:    #F5F5F5;
+    --text-secondary:  #B7B6B3;
+    --text-tertiary:   #9E9D9B;
+
+    --accent:          #3B2FE3;
+    --accent-text:     #FFFFFF;
+
+    --success:         #4ADE80;
+    --danger:           #F87171;
+
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-sans:  'Inter', system-ui, sans-serif;
   }
 
   [data-theme="light"] {
-    --color-base: 248 250 252; /* slate-50 */
-    --color-card: 255 255 255; /* white */
-    --color-card-hover: 241 245 249; /* slate-100 */
-    --color-accent: 124 58 237; /* violet-600 */
-    --color-accent-hover: 109 40 217; /* violet-700 */
-    --color-success: 5 150 105; /* emerald-600 */
-    --color-error: 220 38 38; /* red-600 */
-    --color-text-main: 15 23 42; /* slate-900 */
-    --color-text-muted: 71 85 105; /* slate-600 */
+    --bg-page:        #F8FAF4;  /* slightly warm light page */
+    --bg-surface:      #FFFFFF;
+    --bg-surface-alt:  #F4F3F0;
+    --bg-sidebar:      #ECEAE4;
+    --bg-input:        #FFFFFF;
+    --bg-control:      #ECEAE4;
+
+    --border-default:  #D4D2CD;
+    --border-subtle:   #E2E0D9;
+    --border-dashed:   #BCB9B3;
+
+    --text-primary:    #1F1E1D;
+    --text-secondary:  #6E6C68;
+    --text-tertiary:   #9E9C96;
+
+    --accent:          #3B2FE3;
+    --accent-text:     #FFFFFF;
+
+    --success:         #16A34A;
+    --danger:           #DC2626;
+
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-sans:  'Inter', system-ui, sans-serif;
   }
 
   [data-theme="ocean"] {
-    --color-base: 8 14 44; /* deep ocean blue */
-    --color-card: 13 25 64; /* slightly lighter ocean */
-    --color-card-hover: 23 38 88; /* even lighter */
-    --color-accent: 14 165 233; /* sky-500 */
-    --color-accent-hover: 56 189 248; /* sky-400 */
-    --color-success: 16 185 129; /* emerald-500 */
-    --color-error: 244 63 94; /* rose-500 */
-    --color-text-main: 240 249 255; /* sky-50 */
-    --color-text-muted: 186 230 253; /* sky-200 */
+    --bg-page:        #080E24;
+    --bg-surface:      #0D1940;
+    --bg-surface-alt:  #172554;
+    --bg-sidebar:      #091032;
+    --bg-input:        #080E24;
+    --bg-control:      #0F172A;
+
+    --border-default:  #1E293B;
+    --border-subtle:   #334155;
+    --border-dashed:   #475569;
+
+    --text-primary:    #F0F9FF;
+    --text-secondary:  #BAE6FD;
+    --text-tertiary:   #7DD3FC;
+
+    --accent:          #38BDF8;
+    --accent-text:     #080E2C;
+
+    --success:         #10B981;
+    --danger:           #F43F5E;
+
+    --font-serif: 'Newsreader', Georgia, serif;
+    --font-sans:  'Inter', system-ui, sans-serif;
   }
 
   body {
-    @apply bg-base text-textMain antialiased selection:bg-accent selection:text-white transition-colors duration-500;
-  }
-}
-
-@layer utilities {
-  .glass-panel {
-    @apply bg-card/80 backdrop-blur-md border border-textMain/10 shadow-xl transition-colors duration-500;
-  }
-  .glass-button {
-    @apply bg-textMain/5 backdrop-blur-sm border border-textMain/10 hover:bg-textMain/10 transition-all;
+    @apply bg-page text-text-primary font-sans antialiased selection:bg-accent selection:text-white transition-colors duration-300;
   }
 }
 
@@ -61,14 +146,14 @@
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f172a; 
+  background: var(--bg-page); 
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #334155; 
+  background: var(--border-default); 
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569; 
+  background: var(--border-dashed); 
 }
