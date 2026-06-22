@@ -2,109 +2,116 @@
 
 <img src="https://img.shields.io/badge/Auvon.AI-Intelligent%20Learning%20Ecosystem-6366f1?style=for-the-badge&labelColor=0f0f0f" alt="Auvon.AI"/>
 
-# 🚀 Auvon.AI
-### *Transform Any Subject Into Mastery — Powered by AI*
+# Auvon.AI
+### Transform Any Subject Into Mastery — Powered by AI
 
-An intelligent, full-stack AI learning platform that converts raw academic material and PDFs into structured study notes, progressive learning roadmaps, and analytics-driven interactive quizzes — **engineered entirely on free-tier infrastructure**.
+An intelligent, full-stack AI learning platform that converts raw academic material and PDFs into structured study notes, progressive learning roadmaps, and analytics-driven interactive quizzes — engineered using modern cloud-native infrastructure with Docker, Google Cloud Run, Supabase PostgreSQL, and Vercel while remaining cost-efficient.
 
-[![Live Demo](https://img.shields.io/badge/🌐_Frontend-auvon--ai.vercel.app-4f46e5?style=flat-square&labelColor=1e1e2e)](https://auvon-ai.vercel.app)
-[![Backend API](https://img.shields.io/badge/⚙️_Backend-auvon--ai.onrender.com-10b981?style=flat-square&labelColor=1e1e2e)](https://auvon-ai.onrender.com)
+[![Frontend](https://img.shields.io/badge/Frontend-auvon--ai.vercel.app-4f46e5?style=flat-square&labelColor=1e1e2e)](https://auvon-ai.vercel.app)
+[![Backend](https://img.shields.io/badge/Backend-Google%20Cloud%20Run-10b981?style=flat-square&labelColor=1e1e2e&logo=googlecloud)](https://auvon-backend-582541839217.asia-south1.run.app)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.100+-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)](https://react.dev)
+[![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?style=flat-square&logo=docker&logoColor=white)](https://www.docker.com)
+[![Google Cloud](https://img.shields.io/badge/Google%20Cloud-Run-4285F4?style=flat-square&logo=googlecloud&logoColor=white)](https://cloud.google.com/run)
+[![Artifact Registry](https://img.shields.io/badge/Artifact%20Registry-Google%20Cloud-4285F4?style=flat-square&logo=googlecloud&logoColor=white)](https://cloud.google.com/artifact-registry)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-4169E1?style=flat-square&logo=postgresql)](https://supabase.com)
+[![Supabase](https://img.shields.io/badge/Supabase-Database-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](LICENSE)
-
-> ⚠️ **Cold Start Notice:** The backend runs on Render's free tier. If the server has been idle, **the first request may take 30–60 seconds** to wake up. Subsequent requests are fast.
 
 </div>
 
 ---
 
-## 📖 Table of Contents
+## Table of Contents
 
-- [Project Overview](#-project-overview)
-- [Live Demo](#-live-demo)
-- [Core Features](#-core-features)
-- [System Architecture](#-system-architecture)
-- [RAG Pipeline & Evolution](#-rag-pipeline--evolution)
-- [Benchmarking Results](#-benchmarking-results)
-- [Multi-Model Failover System](#-multi-model-failover-system)
-- [Tech Stack](#-tech-stack)
-- [Database Schema](#-database-schema)
-- [API Reference](#-api-reference)
-- [Local Installation](#️-local-installation)
-- [Engineering Decisions & Trade-offs](#️-engineering-decisions--trade-offs)
-- [System Optimizations](#-system-optimizations--bug-fixes)
-- [Known Limitations & Future Work](#-known-limitations--future-work)
-- [Author](#-author)
+- [Project Overview](#project-overview)
+- [Live Demo](#live-demo)
+- [Core Features](#core-features)
+- [System Architecture](#system-architecture)
+- [RAG Pipeline & Evolution](#rag-pipeline--evolution)
+- [Benchmarking Results](#benchmarking-results)
+- [Multi-Model Failover System](#multi-model-failover-system)
+- [Tech Stack](#tech-stack)
+- [Database Schema](#database-schema)
+- [API Reference](#api-reference)
+- [Local Installation](#local-installation)
+- [Production Deployment](#production-deployment)
+- [Project Structure](#project-structure)
+- [Engineering Decisions & Trade-offs](#engineering-decisions--trade-offs)
+- [Dependency Management](#dependency-management)
+- [System Optimizations](#system-optimizations--bug-fixes)
+- [Security](#security)
+- [Known Limitations & Future Work](#known-limitations--future-work)
+- [Production Engineering Highlights](#production-engineering-highlights)
+- [Author](#author)
 
 ---
 
-## 🧠 Project Overview
+## Project Overview
 
 Auvon.AI bridges the gap between passive reading and active recall. Students don't just consume content — they query it, get tested on it, and receive a structured path to master it.
 
-The project was built to solve a real challenge: **how do you build a production-grade AI study system with zero budget?** The answer required custom engineering solutions at every layer:
+The project was built to solve a real engineering challenge: how do you design a production-grade AI study system that is both technically rigorous and cost-efficient? The answer required custom engineering solutions at every layer:
 
-- **No paid vector DB** → In-memory cosine similarity over JSON-stored PostgreSQL embeddings
-- **No premium LLM key** → Cascading failover across 19 free Gemini API keys + OpenAI fallback
-- **No heavy eval frameworks** → A custom LLM-as-Judge evaluator running in background threads
-- **No email service** → SMTP + Resend integrated but disabled due to Render's free-tier port restrictions
+- **Cost-efficient vector search** — In-memory cosine similarity over JSON-stored PostgreSQL embeddings, avoiding the overhead of a dedicated vector database
+- **Resilient LLM access** — Cascading failover across multiple free Gemini API keys with an OpenAI fallback
+- **Custom evaluation pipeline** — An LLM-as-Judge evaluator running in background threads, replacing the need for heavier eval frameworks in production
+- **Production-ready email infrastructure** — SMTP and Resend integration implemented and ready to enable on any hosting tier that supports outbound email
 
-The result is a **fully functional, benchmarked, and deployed AI system** running entirely on free infrastructure.
+The result is a fully functional, benchmarked, and production-deployed AI system running on modern cloud-native infrastructure.
 
 ---
 
-## 🌐 Live Demo
+## Live Demo
 
 | Service | URL | Notes |
 |---|---|---|
 | **Frontend** | [https://auvon-ai.vercel.app](https://auvon-ai.vercel.app) | Deployed on Vercel |
-| **Backend API** | [https://auvon-ai.onrender.com](https://auvon-ai.onrender.com) | Deployed on Render (free tier — cold starts expected) |
-| **API Docs** | [https://auvon-ai.onrender.com/docs](https://auvon-ai.onrender.com/docs) | Interactive Swagger UI |
+| **Backend API** | [https://auvon-backend-582541839217.asia-south1.run.app](https://auvon-backend-582541839217.asia-south1.run.app) | Deployed on Google Cloud Run |
+| **API Docs** | [https://auvon-backend-582541839217.asia-south1.run.app/docs](https://auvon-backend-582541839217.asia-south1.run.app/docs) | Interactive Swagger UI |
 
 ---
 
-## ✨ Core Features
+## Core Features
 
-### 📚 AI Notes Generator
+### AI Notes Generator
 - Generate rich, structured study notes from any keyword or topic
 - Upload PDFs and have the AI extract and organize content automatically
 - Smart caching via SHA-based hash keys — identical queries never hit the LLM twice
 - Full notes history stored per user
 
-### 🧠 AI Quiz Engine
+### AI Quiz Engine
 - Generates Multiple Choice Questions (MCQs) with randomly distributed correct answers (eliminating location-bias)
 - Score analysis with AI coach feedback on weakest topics
 - Review mode to inspect answers post-submission
 - Full test history per user
 
-### 🎯 Progressive Goal Planner
-- Input any long-term learning goal (e.g., *"Master Kubernetes"*, *"Learn Quantum Mechanics"*)
+### Progressive Goal Planner
+- Input any long-term learning goal (e.g., "Master Kubernetes", "Learn Quantum Mechanics")
 - AI generates a week-by-week actionable roadmap with 3 measurable steps per week
 - Interactive completion tracking per step
 
-### 💬 RAG-Powered Q&A on Study Notes
+### RAG-Powered Q&A on Study Notes
 - Ask any question directly about your study material
 - Answers are strictly grounded in your document with mandatory `[Source N]` citations
 - Built-in LLM-as-Judge evaluator logs faithfulness and relevance scores per query
 
-### ✅ Productivity & Task Tracker
+### Productivity & Task Tracker
 - Daily task management with completion toggles
 - Learning streaks and productivity scores
 - Analytics dashboard for goal progress
 
-### 🔐 Secure Authentication
+### Secure Authentication
 - JWT token-based authentication
 - Bcrypt password hashing
 - Protected routes with user-scoped data isolation
-- *(Email verification is implemented via SMTP/Resend but currently disabled in production — see [Known Limitations](#-known-limitations--future-work))*
+- *(Email verification is implemented via SMTP/Resend but currently disabled in production — see [Known Limitations](#known-limitations--future-work))*
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
-Auvon.AI is a decoupled client-server application designed for speed, portability, and zero external database dependencies.
+Auvon.AI is a decoupled client-server application designed for speed, portability, and scalable cloud-native deployment.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
@@ -119,7 +126,7 @@ Auvon.AI is a decoupled client-server application designed for speed, portabilit
                            │  Axios JSON Requests
                            ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                  FastAPI Backend (Python 3)                         │
+│                  FastAPI Backend (Python 3) — Dockerized           │
 │                                                                     │
 │  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐   │
 │  │  FastAPI App  │  │    JWT Auth  │  │  APIRouter             │   │
@@ -158,6 +165,23 @@ Auvon.AI is a decoupled client-server application designed for speed, portabilit
                               └──────────────────────────────┘
 ```
 
+### Deployment Architecture
+
+```
+React (Vercel)
+       │
+       ▼
+Google Cloud Run (FastAPI)
+       │
+       ▼
+Supabase PostgreSQL
+       │
+       ▼
+Gemini APIs
+```
+
+Build path: GitHub repository → Docker image build → Google Artifact Registry → Google Cloud Run.
+
 ### RAG Query Flow (Sequence)
 
 ```
@@ -186,9 +210,9 @@ Student         Frontend          Backend               DB              AI API
 
 ---
 
-## 🔬 RAG Pipeline & Evolution
+## RAG Pipeline & Evolution
 
-The RAG pipeline was **iteratively engineered and benchmarked** through 3 major iterations. Each change was data-driven, measured against a custom LLM-as-Judge evaluator.
+The RAG pipeline was iteratively engineered and benchmarked through 3 major iterations. Each change was data-driven, measured against a custom LLM-as-Judge evaluator.
 
 ### Evolution Timeline
 
@@ -198,23 +222,23 @@ The RAG pipeline was **iteratively engineered and benchmarked** through 3 major 
  ├─────────────────────────────────────────────────────────────────────┤
  │                                                                     │
  │  ITERATION 1 — Basic Prompting                                      │
- │  ● Model:  GPT-4.1 Nano (via AIPipe/OpenRouter proxy)              │
- │  ● Chunking: Basic fixed-size splits                                │
- │  ● Temperature: Default                                             │
- │  ● Faithfulness: 14.3%  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░          │
+ │  • Model:  GPT-4.1 Nano (via AIPipe/OpenRouter proxy)              │
+ │  • Chunking: Basic fixed-size splits                                │
+ │  • Temperature: Default                                             │
+ │  • Faithfulness: 14.3%  ████░░░░░░░░░░░░░░░░░░░░░░░░░░░          │
  │                                                                     │
  │  ITERATION 2 — Model Upgrade                                        │
- │  ● Model:  gemini-3.5-flash (primary) + gpt-4o-mini (fallback)     │
- │  ● Same chunking, same prompts                                      │
- │  ● Faithfulness: 66.15%  ████████████████████░░░░░░░░░░           │
+ │  • Model:  gemini-3.5-flash (primary) + gpt-4o-mini (fallback)     │
+ │  • Same chunking, same prompts                                      │
+ │  • Faithfulness: 66.15%  ████████████████████░░░░░░░░░░           │
  │                                                                     │
  │  ITERATION 3 — Semantic Chunking + Strict Enforcement               │
- │  ● Custom markdown-aware semantic chunker (1000 chars, 200 overlap) │
- │  ● Temperature forced to 0.0                                        │
- │  ● Mandatory [Source N] citation rules in system prompt             │
- │  ● "Additional Context" sections banned                             │
- │  ● Faithfulness: 81.05%  █████████████████████████░░░░░           │
- │  ● Relevance:   99.47%  █████████████████████████████░            │
+ │  • Custom markdown-aware semantic chunker (1000 chars, 200 overlap) │
+ │  • Temperature forced to 0.0                                        │
+ │  • Mandatory [Source N] citation rules in system prompt             │
+ │  • "Additional Context" sections banned                             │
+ │  • Faithfulness: 81.05%  █████████████████████████░░░░░           │
+ │  • Relevance:   99.47%  █████████████████████████████░            │
  │                                                                     │
  └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -230,18 +254,18 @@ The RAG pipeline was **iteratively engineered and benchmarked** through 3 major 
 
 ---
 
-## 📊 Benchmarking Results
+## Benchmarking Results
 
-The system is evaluated using a custom **LLM-as-Judge benchmarking suite** (`run_benchmark.py` + `evaluator.py`). This generates 5 topics × 5 questions = 25 Q&A pairs, then has an independent LLM score each answer on Faithfulness and Relevance.
+The system is evaluated using a custom LLM-as-Judge benchmarking suite (`run_benchmark.py` + `evaluator.py`). This generates 5 topics × 5 questions = 25 Q&A pairs, then has an independent LLM score each answer on Faithfulness and Relevance.
 
 ### Latest Benchmark Run Summary
 
 | Metric | Score | Target | Status |
 |---|---|---|---|
-| **Total Runs Executed** | 20 / 25 | 25 | ⚠️ 5 skipped (API timeouts) |
-| **Runs Evaluated** | 19 / 20 | 20 | ⚠️ 1 skipped (prompt truncation) |
-| **Average Faithfulness** | **81.05%** | ≥ 80.0% | ✅ PASS |
-| **Average Relevance** | **99.47%** | ≥ 90.0% | ✅ PASS |
+| **Total Runs Executed** | 20 / 25 | 25 | 5 skipped (API timeouts) |
+| **Runs Evaluated** | 19 / 20 | 20 | 1 skipped (prompt truncation) |
+| **Average Faithfulness** | **81.05%** | ≥ 80.0% | PASS |
+| **Average Relevance** | **99.47%** | ≥ 90.0% | PASS |
 
 ### Faithfulness Breakdown by Topic
 
@@ -267,9 +291,9 @@ The system is evaluated using a custom **LLM-as-Judge benchmarking suite** (`run
 
 ---
 
-## ⚡ Multi-Model Failover System
+## Multi-Model Failover System
 
-To maintain 100% uptime with free-tier rate limits (RPM and RPD), Auvon.AI runs a custom cascading failover algorithm across multiple API keys and model tiers.
+To maintain high uptime under free-tier rate limits (RPM and RPD), Auvon.AI runs a custom cascading failover algorithm across multiple API keys and model tiers.
 
 ```
                         ┌─────────────────────┐
@@ -315,14 +339,14 @@ To maintain 100% uptime with free-tier rate limits (RPM and RPD), Auvon.AI runs 
 ```
 
 **Key design decisions:**
-- Keys are **shuffled** before each request to distribute load evenly
-- **Per-minute limits** trigger exponential backoff (3s → 6s → 9s) and retry the same key
-- **Daily quota exhaustion** blacklists a key until UTC midnight, then tries the next one
+- Keys are shuffled before each request to distribute load evenly
+- Per-minute limits trigger exponential backoff (3s → 6s → 9s) and retry the same key
+- Daily quota exhaustion blacklists a key until UTC midnight, then tries the next one
 - If all Gemini keys fail across both model tiers, OpenAI `gpt-4o-mini` serves as the ultimate safety net
 
 ---
 
-## 🏗️ Tech Stack
+## Tech Stack
 
 | Component | Technology | Why |
 |---|---|---|
@@ -331,15 +355,17 @@ To maintain 100% uptime with free-tier rate limits (RPM and RPD), Auvon.AI runs 
 | **HTTP Client** | Axios | Clean interceptors, JSON handling |
 | **Backend** | Python + FastAPI | Async-first, auto Swagger docs, Pydantic validation |
 | **ORM** | SQLAlchemy | Declarative models, transaction management |
-| **Database** | PostgreSQL (Supabase) | Reliable relational DB, free hosted tier |
+| **Database** | PostgreSQL (Supabase) | Reliable managed relational database |
 | **Auth** | JWT + Passlib | Stateless, bcrypt hashing |
 | **Embedding Model** | `gemini-embedding-001` | 768-dim vectors, free tier |
 | **Primary LLM** | `gemini-3.5-flash` | Low latency, large context, free tier |
 | **Fallback LLM** | `gemini-2.5-flash` | More capable, used when primary keys exhausted |
 | **Safety Net LLM** | `gpt-4o-mini` | Reliable, cheap, final backstop |
 | **PDF Extraction** | PyMuPDF | Fast, accurate text extraction |
-| **Deployment: Backend** | Render (free tier) | Zero-cost server hosting |
-| **Deployment: Frontend** | Vercel | Zero-cost static hosting |
+| **Deployment Backend** | Google Cloud Run | Managed, auto-scaling container runtime |
+| **Containerization** | Docker | Consistent local and production environments |
+| **Container Registry** | Google Artifact Registry | Secure, versioned image storage |
+| **Frontend Hosting** | Vercel | Zero-config static hosting with global CDN |
 
 ### Model Evolution
 
@@ -354,7 +380,7 @@ Embed:    N/A (no RAG)            Safety Net: gpt-4o-mini (OpenAI)
 
 ---
 
-## 🗄️ Database Schema
+## Database Schema
 
 ```
 users
@@ -415,9 +441,9 @@ users
 
 ---
 
-## 🔗 API Reference
+## API Reference
 
-### 🔐 Auth Routes
+### Auth Routes
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -425,7 +451,7 @@ users
 | `POST` | `/login` | Login, receive JWT |
 | `GET` | `/me` | Get current authenticated user |
 
-### 📚 Notes Routes
+### Notes Routes
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -435,7 +461,7 @@ users
 | `GET` | `/notes/search` | Full-text search across notes |
 | `POST` | `/notes/{id}/query` | RAG Q&A on a specific note |
 
-### 🧠 Test Routes
+### Test Routes
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -445,7 +471,7 @@ users
 | `GET` | `/tests/{id}` | Get test questions |
 | `GET` | `/tests/result/{id}` | Get detailed result with AI feedback |
 
-### 🎯 Goal Routes
+### Goal Routes
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -454,7 +480,7 @@ users
 | `PUT` | `/steps/{id}` | Toggle step completion |
 | `DELETE` | `/goals/{id}` | Delete a goal |
 
-### ✅ Task Routes
+### Task Routes
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -464,7 +490,7 @@ users
 | `PUT` | `/tasks/{id}/edit` | Edit task content |
 | `DELETE` | `/tasks/{id}` | Delete a task |
 
-### 📈 Progress & Stats
+### Progress & Stats
 
 | Method | Endpoint | Description |
 |---|---|---|
@@ -474,16 +500,16 @@ users
 
 ---
 
-## ⚙️ Local Installation
+## Local Installation
 
-### 1️⃣ Clone Repository
+### 1. Clone Repository
 
 ```bash
 git clone https://github.com/vaidik-dave23/auvon.ai.git
 cd auvon.ai
 ```
 
-### 2️⃣ Setup Backend
+### 2. Setup Backend
 
 ```bash
 cd Backend
@@ -498,9 +524,9 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3️⃣ Configure Environment Variables
+### 3. Configure Environment Variables
 
-Create a `Backend/.env` file:
+Create a `Backend/.env` file for local development. Production deployments use Cloud Run environment variables.
 
 ```env
 # Database
@@ -521,9 +547,19 @@ GEMINI_API_KEY_2=your_key_here
 OPENAI_API_KEY=your_openai_key_here
 ```
 
-> 💡 **Tip:** You can get up to 19 free Gemini API keys using multiple Google accounts. The backend handles all rotation automatically.
+> **Tip:** You can get up to 19 free Gemini API keys using multiple Google accounts. The backend handles all rotation automatically.
 
-### 4️⃣ Run the Servers
+### 4. Run with Docker
+
+```bash
+docker build -t auvon-backend .
+```
+
+```bash
+docker run --env-file .env -p 8080:8080 auvon-backend
+```
+
+### 5. Run the Servers Directly
 
 **Backend:**
 ```bash
@@ -542,7 +578,40 @@ npm run dev
 
 ---
 
-## 🏗️ Project Structure
+## Production Deployment
+
+**Frontend**
+- Vercel
+
+**Backend**
+- Dockerized FastAPI application
+- Google Artifact Registry
+- Google Cloud Run
+
+**Database**
+- Supabase PostgreSQL
+
+**Environment Configuration**
+- Cloud Run Environment Variables
+
+**Build Process**
+
+```
+GitHub
+   │
+   ▼
+Docker Build
+   │
+   ▼
+Artifact Registry
+   │
+   ▼
+Cloud Run
+```
+
+---
+
+## Project Structure
 
 ```
 auvon.ai/
@@ -561,8 +630,11 @@ auvon.ai/
 │   │   │   └── auth.py       # JWT helpers
 │   │   ├── database.py      # SQLAlchemy engine & session
 │   │   └── main.py          # FastAPI app entry point
+│   ├── Dockerfile
+│   ├── .dockerignore
 │   ├── run_benchmark.py     # Automated RAG benchmarking suite
-│   └── requirements.txt
+│   ├── requirements.txt
+│   └── requirements-benchmark.txt
 │
 └── frontend/
     ├── src/
@@ -574,13 +646,13 @@ auvon.ai/
 
 ---
 
-## ⚖️ Engineering Decisions & Trade-offs
+## Engineering Decisions & Trade-offs
 
 ### 1. In-Database Vector Search (JSON Array) vs. External Vector DB
 
 **Decision:** Embeddings from `gemini-embedding-001` are stored as JSON arrays directly in the `document_chunks` PostgreSQL table. Similarity ranking is done in-memory via Python.
 
-**Trade-off:** The search is O(N) per query. However, since queries are **strictly scoped per note ID** and a note typically has fewer than 200 chunks, the calculation completes in under 1ms. This completely eliminates the cost, complexity, and maintenance overhead of Pinecone, Weaviate, or PGVector extensions.
+**Trade-off:** The search is O(N) per query. However, since queries are strictly scoped per note ID and a note typically has fewer than 200 chunks, the calculation completes in under 1ms. This eliminates the cost, complexity, and maintenance overhead of Pinecone, Weaviate, or PGVector extensions.
 
 ---
 
@@ -588,7 +660,7 @@ auvon.ai/
 
 **Decision:** Shuffle and cascade across up to 19 free Gemini API keys with intelligent per-minute and daily-quota handling.
 
-**Trade-off:** Significant code complexity in `ai.py`. However, this allows the system to run continuous queries and full benchmarking runs (25 Q&A pairs) without ever paying for a premium key — a necessary constraint for a zero-budget project.
+**Trade-off:** Significant code complexity in `ai.py`. However, this allows the system to run continuous queries and full benchmarking runs (25 Q&A pairs) at minimal cost, while maintaining strong reliability.
 
 ---
 
@@ -608,7 +680,33 @@ auvon.ai/
 
 ---
 
-## 🔧 System Optimizations & Bug Fixes
+### 5. Containerized Deployment
+
+**Decision:** Containerized the FastAPI backend using Docker and deployed it on Google Cloud Run.
+
+**Why:**
+- Consistent local and production environments
+- Faster deployments
+- Better scalability
+- Cloud-native architecture
+- Resume-worthy production deployment
+
+---
+
+## Dependency Management
+
+### Production vs. Benchmark Dependencies
+
+The project separates runtime dependencies from benchmarking dependencies:
+
+- `requirements.txt` → Production runtime
+- `requirements-benchmark.txt` → RAGAS, PyTorch, evaluation pipeline
+
+This significantly reduces deployment size and keeps the production container lightweight.
+
+---
+
+## System Optimizations & Bug Fixes
 
 Several critical improvements were made during development:
 
@@ -624,18 +722,24 @@ Several critical improvements were made during development:
 
 ---
 
-## ⚠️ Known Limitations & Future Work
+## Security
+
+Secrets are injected through Cloud Run Environment Variables. Sensitive credentials are never committed to the repository.
+
+---
+
+## Known Limitations & Future Work
 
 ### Current Limitations
 
 | Feature | Status | Reason |
 |---|---|---|
-| **Email Verification (SMTP)** | ❌ Disabled in production | Render's free tier blocks outbound SMTP ports |
-| **Email Verification (Resend)** | ❌ Disabled in production | Resend free trial only works for verified sender domains; not suitable for public prod |
-| **Cold Starts** | ⚠️ 30–60s first request | Render free tier spins down idle servers |
+| **Email Verification (SMTP)** | Disabled in production | Outbound SMTP ports restricted on certain hosting configurations |
+| **Email Verification (Resend)** | Disabled in production | Resend free trial only works for verified sender domains; not suitable for public prod |
+| **Cold Starts** | Brief delay possible | Cloud Run instances automatically scale to zero when idle, which may introduce a brief startup delay after long inactivity depending on configuration |
 | **RAG Latency** | ~15s avg | Free-tier API response times + exponential backoff under load |
 
-> **Note on Email:** The full SMTP and Resend email verification flows are fully implemented in the codebase. They are commented out specifically due to hosting restrictions, not missing functionality. This can be enabled immediately on any hosting tier that supports outbound email.
+> **Note on Email:** The full SMTP and Resend email verification flows are fully implemented in the codebase. They are disabled specifically due to hosting restrictions, not missing functionality. This can be enabled immediately on any hosting tier that supports outbound email.
 
 ### Planned Improvements
 
@@ -651,19 +755,32 @@ Several critical improvements were made during development:
 
 ---
 
-## 👨‍💻 Author
+## Production Engineering Highlights
+
+- Containerized the backend using Docker
+- Deployed to Google Cloud Run
+- Stored container images in Google Artifact Registry
+- Integrated Supabase PostgreSQL
+- Configured production environment variables
+- Implemented semantic RAG with benchmarking
+- Built multi-model failover across Gemini and OpenAI
+- Achieved 81.05% Faithfulness and 99.47% Relevance on benchmark evaluation
+
+---
+
+## Author
 
 **Vaidik Dave**
 
-Passionate about AI Engineering, intelligent learning systems, and building scalable, fault-tolerant backend architectures from first principles.
+Passionate about AI engineering, intelligent learning systems, and building scalable, fault-tolerant backend architectures from first principles.
 
-Built entirely on free-tier infrastructure as a demonstration of what's possible with smart engineering and zero budget.
+Engineered with a cloud-native, production-grade architecture as a demonstration of practical full-stack AI/ML engineering.
 
 ---
 
 <div align="center">
 
-**⭐ If this project helped you, consider starring the repository!**
+**If this project helped you, consider starring the repository.**
 
 [![GitHub stars](https://img.shields.io/github/stars/vaidik-dave23/auvon.ai?style=social)](https://github.com/vaidik-dave23/auvon.ai)
 
