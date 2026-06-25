@@ -7,6 +7,59 @@ import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 
+const preprocessMarkdown = (content) => {
+  if (!content) return "";
+
+  // 1. Replace triple single-quotes with triple backticks for code blocks
+  let processed = content.replace(/'''/g, "```");
+
+  // 2. High-performance lookbehind-free isolation pipeline for raw environments
+  const environmentRegex = /\\begin\{(array|cases)\}([\s\S]*?)\\end\{\1\}/g;
+  processed = processed.replace(environmentRegex, (match, envType, envBody, offset, fullString) => {
+    const textBefore = fullString.substring(Math.max(0, offset - 12), offset).trim();
+    const textAfter = fullString.substring(offset + match.length, offset + match.length + 12).trim();
+
+    if (textBefore.endsWith("$$") && textAfter.startsWith("$$")) {
+      return match;
+    }
+    return `\n$$\n\\begin{${envType}}${envBody}\\end{${envType}}\n$$\n`;
+  });
+
+  // 3. Ultra-fast individual line checks for orphaned items (Replaces the heavy backtracking regex blocks)
+  const lines = processed.split("\n");
+  let insideMathBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (line.startsWith("$$")) {
+      insideMathBlock = !insideMathBlock;
+    }
+
+    // If we find an environment block that's structurally missing an opening inside text
+    if (!insideMathBlock && (line.includes("\\begin{array}") || line.includes("\\begin{cases}")) && !line.startsWith("$$")) {
+      lines[i] = `$$\n${lines[i]}`;
+      insideMathBlock = true;
+    }
+    if (insideMathBlock && (line.includes("\\end{array}") || line.includes("\\end{cases}")) && !line.endsWith("$$")) {
+      lines[i] = `${lines[i]}\n$$`;
+      insideMathBlock = false;
+    }
+  }
+  processed = lines.join("\n");
+
+  // 4. Fix underscores inside \text{...} in LaTeX blocks to prevent KaTeX parse errors
+  processed = processed.replace(/\$\$[\s\S]*?\$\$|\$[\s\S]*?\$/g, (mathBlock) => {
+    return mathBlock.replace(/\\text\{([^}]*)\}/g, (textMatch, textContent) => {
+      if (textContent.includes("_")) {
+        return `\\text{${textContent.replace(/_/g, "\\_")}}`;
+      }
+      return textMatch;
+    });
+  });
+
+  return processed;
+};
+
 function NoteReader() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -147,13 +200,23 @@ function NoteReader() {
                       li: ({ children }) => <li className="ml-6 mb-2 list-disc text-text-secondary">{children}</li>,
                       ul: ({ children }) => <ul className="mb-4">{children}</ul>,
                       ol: ({ children }) => <ol className="mb-4 list-decimal pl-4">{children}</ol>,
-                      code: ({ inline, children }) =>
-                        inline
-                          ? <code className="bg-surface-alt border border-border-subtle text-accent px-1.5 py-0.5 rounded text-sm font-mono">{children}</code>
-                          : <pre className="bg-input border border-border rounded-lg p-4 overflow-x-auto text-sm font-mono my-4 text-text-primary"><code>{children}</code></pre>,
+                      code: ({ className, children, ...props }) => {
+                        const match = /language-(\w+)/.exec(className || "");
+                        return !match ? (
+                          <code className="bg-surface-alt border border-border-subtle text-accent px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                            {children}
+                          </code>
+                        ) : (
+                          <pre className="bg-input border border-border rounded-lg p-4 overflow-x-auto text-sm font-mono my-4 text-text-primary">
+                            <code className={className} {...props}>
+                              {children}
+                            </code>
+                          </pre>
+                        );
+                      },
                     }}
                   >
-                    {note.content}
+                    {preprocessMarkdown(note.content)}
                   </ReactMarkdown>
                 </div>
               </div>
@@ -182,11 +245,10 @@ function NoteReader() {
                   ) : (
                     chatMessages.map((msg, idx) => (
                       <div key={idx} className={`flex flex-col ${msg.role === "user" ? "items-end" : "items-start"} w-full`}>
-                        <div className={`max-w-[85%] p-3.5 rounded-lg text-sm leading-relaxed ${
-                          msg.role === "user"
-                            ? "bg-accent text-accent-text rounded-br-none"
-                            : "bg-surface-alt border border-border-subtle text-text-primary rounded-bl-none"
-                        }`}>
+                        <div className={`max-w-[85%] p-3.5 rounded-lg text-sm leading-relaxed ${msg.role === "user"
+                          ? "bg-accent text-accent-text rounded-br-none"
+                          : "bg-surface-alt border border-border-subtle text-text-primary rounded-bl-none"
+                          }`}>
                           {msg.role === "user" ? (
                             msg.text
                           ) : (
@@ -197,13 +259,23 @@ function NoteReader() {
                                 p: ({ children }) => <p className="mb-2 last:mb-0 text-text-secondary">{children}</p>,
                                 h3: ({ children }) => <h3 className="font-serif text-sm font-semibold mt-3 mb-1 text-text-primary">{children}</h3>,
                                 li: ({ children }) => <li className="ml-4 mb-1 list-disc text-text-secondary">{children}</li>,
-                                code: ({ inline, children }) =>
-                                  inline
-                                    ? <code className="bg-surface-alt text-accent px-1 py-0.5 rounded text-xs font-mono">{children}</code>
-                                    : <pre className="bg-input border border-border rounded p-3 overflow-x-auto text-xs font-mono my-2 text-text-primary"><code>{children}</code></pre>,
+                                code: ({ className, children, ...props }) => {
+                                  const match = /language-(\w+)/.exec(className || "");
+                                  return !match ? (
+                                    <code className="bg-surface-alt text-accent px-1 py-0.5 rounded text-xs font-mono" {...props}>
+                                      {children}
+                                    </code>
+                                  ) : (
+                                    <pre className="bg-input border border-border rounded p-3 overflow-x-auto text-xs font-mono my-2 text-text-primary">
+                                      <code className={className} {...props}>
+                                        {children}
+                                      </code>
+                                    </pre>
+                                  );
+                                },
                               }}
                             >
-                              {msg.text}
+                              {preprocessMarkdown(msg.text)}
                             </ReactMarkdown>
                           )}
                         </div>

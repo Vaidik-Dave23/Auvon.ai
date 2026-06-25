@@ -160,35 +160,38 @@ def search_notes(
 
     matched_notes = []
 
-    # 1. Try semantic search first
+    # 1. Try basic title search first (fast, precise, free)
     try:
-        query_emb = get_query_embedding(q)
-        chunks = db.query(DocumentChunk).all()
-        
-        if chunks:
-            note_scores = {}
-            for chunk in chunks:
-                sim = cosine_similarity(query_emb, chunk.embedding)
-                if chunk.note_id not in note_scores or sim > note_scores[chunk.note_id]:
-                    note_scores[chunk.note_id] = sim
-            
-            # Sort note_ids by similarity score descending
-            sorted_notes = sorted(note_scores.items(), key=lambda x: x[1], reverse=True)
-            
-            # Take notes with similarity >= 0.35
-            SIMILARITY_THRESHOLD = 0.35
-            matched_note_ids = [note_id for note_id, score in sorted_notes if score >= SIMILARITY_THRESHOLD]
-            
-            if matched_note_ids:
-                # Fetch notes from DB maintaining the rank order
-                notes_dict = {n.id: n for n in db.query(Notes).filter(Notes.id.in_(matched_note_ids)).all()}
-                matched_notes = [notes_dict[nid] for nid in matched_note_ids if nid in notes_dict]
-    except Exception as e:
-        print(f"⚠️ Semantic search failed, falling back to title search: {e}")
-
-    # 2. Fallback to basic title search if semantic search didn't yield anything
-    if not matched_notes:
         matched_notes = db.query(Notes).filter(Notes.title.ilike(f"%{q}%")).all()
+    except Exception as e:
+        print(f"⚠️ Title search failed: {e}")
+
+    # 2. Fallback to semantic search if title search didn't yield anything
+    if not matched_notes:
+        try:
+            query_emb = get_query_embedding(q)
+            chunks = db.query(DocumentChunk).all()
+            
+            if chunks:
+                note_scores = {}
+                for chunk in chunks:
+                    sim = cosine_similarity(query_emb, chunk.embedding)
+                    if chunk.note_id not in note_scores or sim > note_scores[chunk.note_id]:
+                        note_scores[chunk.note_id] = sim
+                
+                # Sort note_ids by similarity score descending
+                sorted_notes = sorted(note_scores.items(), key=lambda x: x[1], reverse=True)
+                
+                # Take notes with similarity >= 0.70 (calibrated for gemini-embedding-001 narrow-cone baseline)
+                SIMILARITY_THRESHOLD = 0.70
+                matched_note_ids = [note_id for note_id, score in sorted_notes if score >= SIMILARITY_THRESHOLD]
+                
+                if matched_note_ids:
+                    # Fetch notes from DB maintaining the rank order
+                    notes_dict = {n.id: n for n in db.query(Notes).filter(Notes.id.in_(matched_note_ids)).all()}
+                    matched_notes = [notes_dict[nid] for nid in matched_note_ids if nid in notes_dict]
+        except Exception as e:
+            print(f"⚠️ Semantic search failed: {e}")
 
     # 3. Associate matched notes with the user so they don't get 403 on view/query
     if matched_notes:

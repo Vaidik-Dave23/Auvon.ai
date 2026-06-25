@@ -2,12 +2,12 @@ import api from "./axios";
 
 // 🔍 search
 export const searchNotes = (query) => {
-  return api.get(`/notes/search?q=${query}`);
+  return api.get(`/notes/search?q=${encodeURIComponent(query)}`);
 };
 
 // 🤖 generate
 export const generateNotes = (query) => {
-  return api.post(`/notes/generate?query=${query}`);
+  return api.post(`/notes/generate?query=${encodeURIComponent(query)}`);
 };
 
 // 👤 my notes

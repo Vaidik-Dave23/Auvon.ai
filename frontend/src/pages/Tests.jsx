@@ -150,31 +150,41 @@ function Tests() {
                   <div key={i} className="h-24 rounded-lg bg-surface border border-border animate-pulse" />
                 ))
               ) : (
-                history.map((t) => (
-                  <div
-                    key={t.test_id}
-                    onClick={() => navigate(`/result/${t.test_id}`)}
-                    className="bg-surface border border-border p-5 rounded-lg cursor-pointer hover:bg-surface-alt transition-colors relative group"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="overflow-hidden pr-8">
-                        <h3 className="font-semibold text-base text-text-primary truncate">
-                          {t.topic || `Test #${t.test_id}`}
-                        </h3>
-                        <p className="text-xs text-text-tertiary mt-2">
-                          {t.num_questions || 5} questions • {t.difficulty || "easy"}
-                        </p>
-                      </div>
+                history.map((t) => {
+                  const hasAttempt = t.score !== null && t.score !== undefined;
+                  return (
+                    <div
+                      key={t.test_id}
+                      onClick={() => navigate(hasAttempt ? `/result/${t.test_id}` : `/test/${t.test_id}`)}
+                      className="bg-surface border border-border p-5 rounded-lg cursor-pointer hover:bg-surface-alt transition-colors relative group"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div className="overflow-hidden pr-8">
+                          <h3 className="font-semibold text-base text-text-primary truncate">
+                            {t.topic || `Test #${t.test_id}`}
+                          </h3>
+                          <p className="text-xs text-text-tertiary mt-2">
+                            {t.num_questions || 5} questions • {t.difficulty || "easy"}
+                          </p>
+                        </div>
 
-                      <div className="flex flex-col items-end flex-shrink-0">
-                        <span className="font-serif text-2xl font-semibold text-success leading-none">
-                          {t.score}%
-                        </span>
-                        <span className="text-[10px] text-text-tertiary uppercase mt-1">
-                          best: {t.best_score}%
-                        </span>
+                        <div className="flex flex-col items-end flex-shrink-0">
+                          {hasAttempt ? (
+                            <>
+                              <span className="font-serif text-2xl font-semibold text-success leading-none">
+                                {t.score}%
+                              </span>
+                              <span className="text-[10px] text-text-tertiary uppercase mt-1">
+                                best: {t.best_score}%
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-xs font-bold text-accent bg-accent/10 px-2.5 py-1.5 rounded-lg border border-accent/20 transition-all uppercase tracking-wide group-hover:bg-accent group-hover:text-white">
+                              Start Quiz
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
 
                     <button 
                       onClick={(e) => deleteTest(t.test_id, e)}
@@ -186,7 +196,8 @@ function Tests() {
                       </svg>
                     </button>
                   </div>
-                ))
+                );
+              })
               )}
               
               {!historyLoading && history.length === 0 && (

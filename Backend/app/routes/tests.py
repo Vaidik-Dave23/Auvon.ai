@@ -58,7 +58,7 @@ async def generate_test(
     new_test = Test(
         user_id=user.id,
         topic=test_topic,
-        created_at=str(datetime.now())
+        created_at=datetime.utcnow().isoformat()
     )
     db.add(new_test)
     db.commit()
@@ -94,18 +94,25 @@ async def generate_test(
 # 📚 HISTORY
 @router.get("/")
 def get_tests(db: Session = Depends(get_db), user=Depends(get_verified_user)):
-    results = db.query(Test_Result).filter(Test_Result.user_id == user.id).join(Test).order_by(Test.created_at.desc()).all()
+    tests = db.query(Test).filter(Test.user_id == user.id).order_by(Test.created_at.desc()).all()
 
-    return [
-        {
-            "test_id": r.test_id,
-            "topic": r.test.topic,
-            "score": r.last_score,
-            "best_score": r.best_score,
-            "created_at": r.test.created_at
-        }
-        for r in results
-    ]
+    response = []
+    for t in tests:
+        r = db.query(Test_Result).filter(
+            Test_Result.test_id == t.id,
+            Test_Result.user_id == user.id
+        ).first()
+
+        response.append({
+            "test_id": t.id,
+            "topic": t.topic,
+            "score": r.last_score if r else None,
+            "best_score": r.best_score if r else None,
+            "created_at": t.created_at,
+            "num_questions": len(t.questions)
+        })
+
+    return response
 
 
 # 📊 SUBMIT TEST
@@ -158,7 +165,11 @@ def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Dep
     score = int((correct / total) * 100) if total > 0 else 0
 
     # Generate fresh feedback and store it
-    ai_feedback = generate_weak_topic_review(weak_topics, score, total)
+    try:
+        ai_feedback = generate_weak_topic_review(weak_topics, score, total)
+    except Exception as e:
+        print(f"⚠️ Failed to generate AI feedback for test result: {e}")
+        ai_feedback = "Complete a test attempt to receive AI feedback."
 
     existing = db.query(Test_Result).filter(
         Test_Result.user_id == user.id,

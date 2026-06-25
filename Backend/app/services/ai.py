@@ -48,7 +48,7 @@ def _is_daily_quota_error(text: str) -> bool:
     try:
         data = json.loads(text)
         if isinstance(data, list) and len(data) > 0:
-            data = data[0]
+            data = data
         error = data.get("error", {})
         details = error.get("details", [])
         for detail in details:
@@ -174,17 +174,7 @@ def ai(
     temperature: float = None,
 ) -> str:
     """
-    Multi-provider AI caller.
-
-    Cascade:
-      1. Gemini gemini-2.0-flash      — try every non-exhausted key
-      2. Gemini gemini-2.0-flash-lite — retry all keys on lighter model
-      3. OpenAI gpt-4o-mini           — if OPENAI_API_KEY is set
-
-    .env setup:
-        GEMINI_API_KEY_1=AIza...
-        GEMINI_API_KEY_2=AIza...   (add as many free keys as you have)
-        OPENAI_API_KEY=sk-...      (optional — final safety net)
+    Multi-provider AI caller with systematic cascading fallbacks.
     """
     load_dotenv(override=True)
 
@@ -206,7 +196,7 @@ def ai(
 
     # ── Pass 2: Gemini fallback model ───────────────────────────────────────
     if response_json is None:
-        keys = _load_gemini_keys()   # re-load so freshly-exhausted keys are excluded
+        keys = _load_gemini_keys()   
         if keys:
             print(f"🔁 Trying {GEMINI_FALLBACK_MODEL} with {len(keys)} key(s)…")
             for key in keys:
@@ -304,7 +294,7 @@ def _parse_json_response(raw: str, context: str):
 
 
 # ---------------------------------------------------------------------------
-# Feature functions — prompts unchanged, just use the new ai() above
+# Feature functions
 # ---------------------------------------------------------------------------
 
 def generate_plan(goal: str, weeks: int) -> list[dict]:
@@ -352,83 +342,80 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
 
 
 def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
-    """Generate exam-ready notes from a keyword topic or raw PDF text."""
+    """
+    Optimized notes generation prompt for maximum structural performance 
+    and flawless LaTeX/Markdown compatibility with the frontend parser.
+    """
+    
+    # Structural anchor variables to force strict layout obedience
+    system_instruction = (
+        "You are an elite academic tutor and an expert at compiling dense, exam-ready study notes. "
+        "Your output must be deeply technical, specific, and structured for maximum clarity. "
+        "Include actual formulas, code syntax, exact parameters, edge cases, and architectural diagrams using Markdown text layout structures.\n\n"
+        "CRITICAL MARKDOWN AND LATEX FORMATTING RULES:\n"
+        "1. Heading tags must strictly stick to markdown standards: Use '##' for main sections, '###' for sub-sections. Never jump formatting sizes.\n"
+        "2. Do NOT use LaTeX block environments (like \\begin{array}) to create standard informational comparative data tables. "
+        "For tabular structural data, comparisons, or cheatsheets, you MUST exclusively use standard GitHub-Flavored Markdown tables with '|' columns and alignment dash lines.\n"
+        "3. Every single LaTeX mathematical or logic block-level environment (including \\begin{matrix}, \\begin{cases}, or \\begin{array} for computational math arrays) "
+        "MUST be explicitly wrapped inside double-dollar signs ($$) on their own separate, isolated lines.\n"
+        "Example of correct math formatting layout:\n"
+        "$$\n"
+        "\\begin{cases}\n"
+        "O(1) & \\text{if } n = 1 \\\\\n"
+        "T(n/2) + O(1) & \\text{if } n > 1\n"
+        "\\end{cases}\n"
+        "$$\n"
+        "4. Any single variable or brief inline mathematical expression must be bound cleanly inside single-dollar sign ($) inline tags."
+    )
+
     if is_pdf:
-        prompt = [
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert study notes creator. Your job is to read raw document content "
-                    "and produce dense, exam-ready study notes that capture the ACTUAL information "
-                    "in the document — not generic summaries about the topic. "
-                    "Every point must come from the document itself. "
-                    "Use markdown: ## headings, **bold** for key terms, `code` for commands/syntax, "
-                    "bullet points for lists, and tables where helpful."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    "Below is the content extracted from a document. "
-                    "Create thorough, exam-ready study notes from it.\n\n"
-                    "Follow this structure:\n\n"
-                    "## 📌 What This Document Covers\n"
-                    "1-2 sentences on the actual topic and purpose of THIS document.\n\n"
-                    "## 🔑 Key Concepts & Facts\n"
-                    "Extract every important concept, definition, rule, or fact directly from the text. "
-                    "Use bullet points. Bold the term, then explain it. "
-                    "Include specific details, numbers, commands, formulas — whatever the document contains.\n\n"
-                    "## 📝 Important Examples / Questions Covered\n"
-                    "List the most important examples, practice problems, or scenarios from the document. "
-                    "Show the actual example AND the solution/answer approach if present.\n\n"
-                    "## ⚡ Quick-Reference Cheatsheet\n"
-                    "Create a compact table or list of the most testable facts, commands, formulas, "
-                    "or rules — the things most likely to appear in an exam.\n\n"
-                    "## ⚠️ Tricky Parts & Common Mistakes\n"
-                    "Based on the document content, what are the edge cases, exceptions, or "
-                    "commonly confused concepts a student must know?\n\n"
-                    "## 🎯 Summary — What You Must Know\n"
-                    "5-8 bullet points of the absolute must-know takeaways from THIS document.\n\n"
-                    "---\n"
-                    "DOCUMENT CONTENT:\n\n"
-                    f"{query}"
-                ),
-            },
-        ]
+        user_content = (
+            "Read the following raw extracted text carefully. Extract every critical fact, concept, definition, "
+            "and formula to build exhaustive, exam-ready study notes. Do not summarize or gloss over dense parts.\n\n"
+            "Build your response matching this strict structural layout template down to the letter:\n\n"
+            "## 📌 What This Document Covers\n"
+            "Provide a dense 2-sentence breakdown detailing the specific technical scope, target, and boundaries covered in this document.\n\n"
+            "## 🔑 Core Concepts & Structural Facts\n"
+            "Extract every important architectural definition, algorithmic rule, or piece of metadata directly from the source text. "
+            "Use bullet points. **Bold the specific term**, then provide a technical definition. Include explicit details, numbers, and parameters.\n\n"
+            "## 📝 Core Formulas & Mathematical Derivations\n"
+            "List all relevant formulas, proofs, or logical derivations. Ensure all standalone block environments are bound within double-dollar delimiters ($$).\n\n"
+            "## ⚡ Quick-Reference Cheatsheet Table\n"
+            "Create a highly compact lookup table mapping the most testable concepts, time/space granularities, commands, or rules. "
+            "REMINDER: This layout section MUST use standard Markdown tables (using '|' and alignment dashes). Do NOT use LaTeX array syntax here.\n\n"
+            "## ⚠️ Edge Cases & Common Misconceptions\n"
+            "Highlight tricky conditions, hidden operational gotchas, boundary overflows, or standard debugging traps present in the material.\n\n"
+            "## 🎯 Absolute Takeaways Summary\n"
+            "Provide exactly 5-8 hyper-dense bullet points summarizing the absolute must-know baseline points.\n\n"
+            "---\n"
+            "DOCUMENT CONTENT:\n"
+            f"{query}\n"
+        )
     else:
-        prompt = [
-            {
-                "role": "system",
-                "content": (
-                    "You are an expert academic tutor. Generate dense, exam-ready study notes. "
-                    "Be specific and technical — include actual facts, formulas, syntax, examples, "
-                    "and edge cases. Never be vague or generic. "
-                    "Use markdown: ## headings, **bold** for terms, `code` for syntax/commands, "
-                    "tables for comparisons, and bullet points for lists."
-                ),
-            },
-            {
-                "role": "user",
-                "content": (
-                    f"Generate comprehensive, exam-ready study notes on: **{query}**\n\n"
-                    "## 📘 Overview\n"
-                    "What is it, why does it matter, where is it used? Be specific.\n\n"
-                    "## 🔑 Core Concepts — Detailed\n"
-                    "For each key concept: define it precisely, give the syntax/formula if applicable, "
-                    "and give a concrete mini-example. Bold every term.\n\n"
-                    "## 💻 Practical Examples\n"
-                    "Give 3-5 worked examples with actual code/formulas/calculations shown step by step. "
-                    "Not pseudocode — real, runnable examples.\n\n"
-                    "## 📊 Comparisons & Edge Cases\n"
-                    "Compare similar concepts in a table (e.g. A vs B vs C). "
-                    "List edge cases and gotchas a student must know.\n\n"
-                    "## ⚡ Quick-Reference Cheatsheet\n"
-                    "The most testable facts, commands, or formulas in a compact list or table.\n\n"
-                    "## 🎯 Must-Know Summary\n"
-                    "5-8 bullet points — the things most likely to appear in an exam on this topic."
-                ),
-            },
-        ]
+        user_content = (
+            f"Generate an exhaustive, highly technical, exam-ready notebook structure regarding the topic: **{query}**.\n\n"
+            "Build your response matching this strict structural layout template down to the letter:\n\n"
+            "## 📘 Domain Architectural Overview\n"
+            "Define the topic contextually. What exact systemic problem does it address? Why does it matter, and where is it implemented in production networks? Be technically precise.\n\n"
+            "## 🔑 Core Mechanics — Detailed Breakdown\n"
+            "Break down the topic into its operational sub-components. For each item: define its scope precisely, supply standard code/syntax declarations if applicable, "
+            "and map an illustrative micro-use-case scenario. **Bold every operational term**.\n\n"
+            "## 💻 Practical Code Implementations\n"
+            "Provide 2-3 complete, production-grade, highly optimized code block implementations or calculation passes. "
+            "Do not write loose pseudocode; write clean, commented code snippets bounded inside standard triple-backtick markdown blocks[cite: 1, 2].\n\n"
+            "## 📊 Comparative Analysis & Trade-offs\n"
+            "Map out a matrix table evaluating adjacent architectural strategies or variations (e.g., Space vs. Time complexities, paradigm variants). "
+            "REMINDER: This layout section MUST use standard Markdown tables (using '|' and alignment dashes). Do NOT use LaTeX array syntax here.\n\n"
+            "## ⚡ Performance Cheatsheet\n"
+            "A fast-lookup checklist or Markdown data matrix identifying mathematical limits, asymptotic complexities ($O$, $\\Omega$, $\\Theta$), or baseline properties.\n\n"
+            "## 🎯 Must-Know Summary\n"
+            "Provide exactly 5-8 hyper-dense bullet points covering the absolute maximum priority facts a student needs to recall.\n"
+        )
+
+    prompt = [
+        {"role": "system", "content": system_instruction},
+        {"role": "user", "content": user_content}
+    ]
 
     return ai(prompt, endpoint_name="generate_notes")
 
@@ -490,7 +477,7 @@ def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:
         labelled_options = [f"Option {chr(65+i)}: {opt}" for i, opt in enumerate(options)]
         correct_label    = next(
             (f"Option {chr(65+i)}: {opt}" for i, opt in enumerate(options) if opt == matched_correct),
-            labelled_options[0],
+            labelled_options,
         )
 
         processed.append({
@@ -515,7 +502,7 @@ def generate_weak_topic_review(weak_topics: list[str], score: int = None, total:
         f"The student scored {score}% ({total - len(unique_topics)}/{total} correct). "
         if score is not None and total is not None else ""
     )
-    priority_topic = unique_topics[0]
+    priority_topic = unique_topics
     other_topics   = unique_topics[1:4]
 
     prompt = [
