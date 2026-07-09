@@ -92,7 +92,7 @@ async def generate_test(
 
 
 # 📚 HISTORY
-@router.get("/")
+@router.get("")
 def get_tests(db: Session = Depends(get_db), user=Depends(get_verified_user)):
     tests = db.query(Test).filter(Test.user_id == user.id).order_by(Test.created_at.desc()).all()
 
