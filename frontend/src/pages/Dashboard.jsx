@@ -137,6 +137,14 @@ function Dashboard() {
     return new Date().toLocaleDateString('en-US', options);
   };
 
+  // Get dynamic greeting based on time of day
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 17) return "Good afternoon";
+    return "Good evening";
+  };
+
   return (
     <div className="min-h-screen bg-page flex text-text-primary font-sans">
       <Sidebar />
@@ -148,7 +156,7 @@ function Dashboard() {
             {getFormattedDate()}
           </p>
           <h1 className="font-serif text-3xl font-semibold text-text-primary">
-            Good morning, {user?.name || "Student"}
+            {getGreeting()}, {user?.name || "Student"}
           </h1>
         </header>
 
