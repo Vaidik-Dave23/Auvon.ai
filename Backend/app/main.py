@@ -2,6 +2,14 @@ from fastapi import FastAPI
 from app.database import engine
 from app import database
 
+from app.core.logging_config import configure_logging, get_logger
+from app.core.middleware import RequestContextMiddleware
+from app.core.metrics import setup_metrics
+from app.core.tracing import setup_tracing
+
+configure_logging()
+log = get_logger(__name__)
+
 from app.models.user import User
 from app.models.notes import Notes , UserNotes
 from app.models.task import Task
@@ -36,7 +44,7 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires_at TIMESTAMP;"))
         conn.commit()
     except Exception as e:
-        print(f"Database migration note: {e}")
+        log.warning("db_migration_note", error=str(e))
 
 app = FastAPI()
 origins = [
@@ -53,6 +61,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Order matters: this must be added so it's the outermost middleware,
+# wrapping CORS and every route, so request_id/timing cover the whole
+# request lifecycle.
+app.add_middleware(RequestContextMiddleware)
+
+setup_metrics(app)       # -> GET /metrics (Prometheus scrape target)
+setup_tracing(app, engine)  # OTel spans exported to OTEL_EXPORTER_OTLP_ENDPOINT
+
+
+@app.get("/health", include_in_schema=False)
+def health():
+    return {"status": "ok"}
+
+
 app.include_router(auth.router)
 app.include_router(notes.router)
 app.include_router(progress.router)

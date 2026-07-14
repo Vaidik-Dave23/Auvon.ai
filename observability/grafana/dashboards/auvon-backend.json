@@ -1,0 +1,111 @@
+{
+  "title": "Auvon.ai - Backend Observability",
+  "uid": "auvon-backend",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Requests / min",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total[1m])) * 60",
+          "legendFormat": "req/min"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Error rate (5xx %)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 0 },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_requests_total{status=~\"5..\"}[5m])) / sum(rate(http_requests_total[5m]))",
+          "legendFormat": "5xx %"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "p50 / p95 request latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "LLM latency by provider/model (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(llm_latency_seconds_bucket[5m])) by (le, provider, model))",
+          "legendFormat": "{{provider}}/{{model}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "LLM calls: success vs error, by provider",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(llm_calls_total[5m])) by (provider, outcome)",
+          "legendFormat": "{{provider}} - {{outcome}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Embedding latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(embedding_latency_seconds_bucket[5m])) by (le, task_type))",
+          "legendFormat": "{{task_type}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Token usage / min (prompt vs completion)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(llm_tokens_total[1m])) by (token_type) * 60",
+          "legendFormat": "{{token_type}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Unhandled errors by endpoint",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum(rate(api_errors_total[5m])) by (endpoint)",
+          "legendFormat": "{{endpoint}}"
+        }
+      ]
+    }
+  ]
+}

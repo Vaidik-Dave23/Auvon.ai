@@ -13,6 +13,9 @@ from app.schemas.test import (
 )
 from app.services.ai import generate_questions, generate_weak_topic_review
 from app.utils.dependencies import get_verified_user
+from app.core.logging_config import get_logger
+
+log = get_logger(__name__)
 from app.models.user_answer import UserAnswer
 
 router = APIRouter(prefix="/tests", tags=["tests"])
@@ -168,7 +171,7 @@ def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Dep
     try:
         ai_feedback = generate_weak_topic_review(weak_topics, score, total)
     except Exception as e:
-        print(f"⚠️ Failed to generate AI feedback for test result: {e}")
+        log.warning("ai_feedback_generation_failed", test_id=data.test_id, error=str(e))
         ai_feedback = "Complete a test attempt to receive AI feedback."
 
     existing = db.query(Test_Result).filter(

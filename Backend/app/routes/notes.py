@@ -10,6 +10,11 @@ from datetime import datetime
 import fitz
 import math
 from app.models.chunk import DocumentChunk
+from app.core.logging_config import get_logger
+from app.core.tracing import get_tracer
+
+log = get_logger(__name__)
+tracer = get_tracer(__name__)
 
 
 # ── Chunking (imported from utils) ──────────────────────────────────────────
@@ -121,12 +126,12 @@ def embed_and_store_note_chunks(note_id: int, text: str):
                 db.add(DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=embedding))
                 stored += 1
             except Exception as e:
-                print(f"⚠️  Embedding failed for chunk: {e}")
+                log.warning("chunk_embedding_failed", note_id=note_id, error=str(e))
 
         db.commit()
-        print(f"✅ Stored {stored} chunks for note {note_id}")
+        log.info("note_chunks_stored", note_id=note_id, chunks_stored=stored, chunks_total=len(chunks))
     except Exception as e:
-        print(f"❌ embed_and_store_note_chunks failed for note {note_id}: {e}")
+        log.error("embed_and_store_note_chunks_failed", note_id=note_id, error=str(e))
     finally:
         db.close()
 
@@ -164,7 +169,7 @@ def search_notes(
     try:
         matched_notes = db.query(Notes).filter(Notes.title.ilike(f"%{q}%")).all()
     except Exception as e:
-        print(f"⚠️ Title search failed: {e}")
+        log.warning("title_search_failed", query=q, error=str(e))
 
     # 2. Fallback to semantic search if title search didn't yield anything
     if not matched_notes:
@@ -191,7 +196,7 @@ def search_notes(
                     notes_dict = {n.id: n for n in db.query(Notes).filter(Notes.id.in_(matched_note_ids)).all()}
                     matched_notes = [notes_dict[nid] for nid in matched_note_ids if nid in notes_dict]
         except Exception as e:
-            print(f"⚠️ Semantic search failed: {e}")
+            log.warning("semantic_search_failed", query=q, error=str(e))
 
     # 3. Associate matched notes with the user so they don't get 403 on view/query
     if matched_notes:
@@ -317,22 +322,27 @@ def query_note(
         raise HTTPException(status_code=502, detail=f"Query embedding failed: {e}")
 
     # ── Retrieve chunks ───────────────────────────────────────────────────────
-    chunks = db.query(DocumentChunk).filter(DocumentChunk.note_id == note_id).all()
+    with tracer.start_as_current_span("retrieve_chunks") as span:
+        span.set_attribute("note_id", note_id)
+        chunks = db.query(DocumentChunk).filter(DocumentChunk.note_id == note_id).all()
 
-    if not chunks:
-        # On-demand fallback: chunk + embed note content right now
-        note_chunks = chunk_text(note.content, max_chunk_size=1000, overlap=200)
-        for chunk_txt in note_chunks:
-            if not chunk_txt.strip():
-                continue
-            try:
-                emb = get_embedding(chunk_txt)
-                chunk_obj = DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=emb)
-                db.add(chunk_obj)
-                chunks.append(chunk_obj)
-            except Exception as e:
-                print(f"On-demand embed failed: {e}")
-        db.commit()
+        if not chunks:
+            span.set_attribute("retrieve_chunks.on_demand_fallback", True)
+            # On-demand fallback: chunk + embed note content right now
+            note_chunks = chunk_text(note.content, max_chunk_size=1000, overlap=200)
+            for chunk_txt in note_chunks:
+                if not chunk_txt.strip():
+                    continue
+                try:
+                    emb = get_embedding(chunk_txt)
+                    chunk_obj = DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=emb)
+                    db.add(chunk_obj)
+                    chunks.append(chunk_obj)
+                except Exception as e:
+                    log.warning("on_demand_embed_failed", note_id=note_id, error=str(e))
+            db.commit()
+
+        span.set_attribute("retrieve_chunks.count", len(chunks))
 
     if not chunks:
         raise HTTPException(status_code=400, detail="No retrievable content found for this note")

@@ -1,0 +1,16 @@
+# Scrape config for local dev. host.docker.internal resolves to your
+# host machine from inside the Prometheus container (works on Docker
+# Desktop for Mac/Windows; on Linux the extra_hosts entry in the
+# compose file makes it work too).
+#
+# In Cloud Run / production, replace this target with your actual
+# backend hostname, or better: have your platform's Prometheus operator
+# discover it via service discovery instead of a static target.
+
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "auvon-backend"
+    static_configs:
+      - targets: ["host.docker.internal:8000"]

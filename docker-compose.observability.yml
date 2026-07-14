@@ -1,0 +1,52 @@
+version: "3.8"
+
+# Local observability stack for Auvon.ai.
+#
+# Run alongside your existing backend (this file does NOT define the
+# backend service itself — point your already-running backend at these
+# via env vars, see the two lines below).
+#
+#   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318/v1/traces
+#   ENVIRONMENT=development
+#
+# Start:   docker compose -f docker-compose.observability.yml up -d
+# Grafana: http://localhost:3001  (admin / admin — change on first login)
+# Prometheus: http://localhost:9090
+# Jaeger UI: http://localhost:16686
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: auvon-prometheus
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # lets Prometheus scrape the backend running on your host
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: auvon-grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62
+    container_name: auvon-jaeger
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4318:4318"     # OTLP HTTP receiver — this is OTEL_EXPORTER_OTLP_ENDPOINT
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true

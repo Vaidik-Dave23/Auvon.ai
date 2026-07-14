@@ -9,8 +9,14 @@ import datetime
 from threading import Lock
 from app.database import SessionLocal
 from app.models.ai_log import AILog
+from app.core.logging_config import get_logger
+from app.core.metrics import LLM_LATENCY, LLM_CALLS, LLM_TOKENS
+from app.core.tracing import get_tracer
 
 load_dotenv()
+
+log = get_logger(__name__)
+tracer = get_tracer(__name__)
 
 # ---------------------------------------------------------------------------
 # Provider configuration
@@ -41,7 +47,7 @@ def _is_daily_exhausted(key: str) -> bool:
 def _mark_daily_exhausted(key: str) -> None:
     with _blacklist_lock:
         _daily_exhausted[key] = _today()
-    print(f"🚫 Gemini key ...{key[-4:]} daily quota gone — skipping until tomorrow (UTC).")
+    log.warning("gemini_key_daily_exhausted", key_suffix=key[-4:])
 
 
 def _is_daily_quota_error(text: str) -> bool:
@@ -90,7 +96,7 @@ def _load_gemini_keys() -> list[str]:
     active = [k for k in keys if not _is_daily_exhausted(k)]
     skipped = len(keys) - len(active)
     if skipped:
-        print(f"ℹ️  {skipped}/{len(keys)} Gemini key(s) daily-exhausted, skipping.")
+        log.info("gemini_keys_skipped", skipped=skipped, total=len(keys))
     random.shuffle(active)
     return active
 
@@ -123,7 +129,14 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 
                     raise RuntimeError(f"Daily quota exhausted on {model}")
                 
                 sleep_time = (attempt + 1) * 3
-                print(f"⏳ Key ...{api_key[-4:]} per-minute limit on {model}. Attempt {attempt + 1}/{max_retries}. Backing off {sleep_time}s…")
+                log.warning(
+                    "gemini_rate_limited",
+                    key_suffix=api_key[-4:],
+                    model=model,
+                    attempt=attempt + 1,
+                    max_retries=max_retries,
+                    backoff_seconds=sleep_time,
+                )
                 time.sleep(sleep_time)
                 continue
                 
@@ -135,7 +148,13 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
                 sleep_time = (attempt + 1) * 3
-                print(f"⏳ Connection error: {e}. Retrying in {sleep_time}s...")
+                log.warning(
+                    "gemini_connection_error",
+                    model=model,
+                    error=str(e),
+                    attempt=attempt + 1,
+                    backoff_seconds=sleep_time,
+                )
                 time.sleep(sleep_time)
                 continue
             raise e
@@ -180,56 +199,73 @@ def ai(
 
     response_json = None
     used_model    = None
+    used_provider = None
     start_time    = time.time()
     last_error    = None
 
-    # ── Pass 1: Gemini primary ──────────────────────────────────────────────
-    keys = _load_gemini_keys()
-    for key in keys:
-        try:
-            response_json = _call_gemini(key, GEMINI_PRIMARY_MODEL, prompt, temperature=temperature)
-            used_model = f"gemini/{GEMINI_PRIMARY_MODEL}"
-            break
-        except Exception as e:
-            last_error = e
-            print(f"⚠️  Key ...{key[-4:]} failed on {GEMINI_PRIMARY_MODEL}: {e}")
+    with tracer.start_as_current_span("llm_generate") as span:
+        span.set_attribute("llm.endpoint_name", endpoint_name)
 
-    # ── Pass 2: Gemini fallback model ───────────────────────────────────────
-    if response_json is None:
-        keys = _load_gemini_keys()   
-        if keys:
-            print(f"🔁 Trying {GEMINI_FALLBACK_MODEL} with {len(keys)} key(s)…")
-            for key in keys:
-                try:
-                    response_json = _call_gemini(key, GEMINI_FALLBACK_MODEL, prompt, temperature=temperature)
-                    used_model = f"gemini/{GEMINI_FALLBACK_MODEL}"
-                    break
-                except Exception as e:
-                    last_error = e
-                    print(f"⚠️  Key ...{key[-4:]} failed on {GEMINI_FALLBACK_MODEL}: {e}")
-
-    # ── Pass 3: OpenAI safety net ───────────────────────────────────────────
-    if response_json is None:
-        openai_key = _load_openai_key()
-        if openai_key:
-            print(f"🔁 All Gemini keys exhausted — trying OpenAI {OPENAI_MODEL}…")
+        # ── Pass 1: Gemini primary ──────────────────────────────────────────
+        keys = _load_gemini_keys()
+        for key in keys:
             try:
-                response_json = _call_openai(openai_key, prompt, temperature=temperature)
-                used_model = f"openai/{OPENAI_MODEL}"
+                response_json = _call_gemini(key, GEMINI_PRIMARY_MODEL, prompt, temperature=temperature)
+                used_model, used_provider = GEMINI_PRIMARY_MODEL, "gemini"
+                break
             except Exception as e:
                 last_error = e
-                print(f"⚠️  OpenAI fallback failed: {e}")
+                LLM_CALLS.labels(provider="gemini", model=GEMINI_PRIMARY_MODEL, endpoint=endpoint_name, outcome="error").inc()
+                log.warning("gemini_key_failed", key_suffix=key[-4:], model=GEMINI_PRIMARY_MODEL, error=str(e))
 
-    if response_json is None:
-        raise HTTPException(
-            status_code=502,
-            detail=(
-                f"All AI providers failed. Last error: {last_error}. "
-                "Check GEMINI_API_KEY_* and OPENAI_API_KEY in .env."
-            ),
-        )
+        # ── Pass 2: Gemini fallback model ─────────────────────────────────────
+        if response_json is None:
+            keys = _load_gemini_keys()
+            if keys:
+                log.info("gemini_falling_back_to_secondary_model", model=GEMINI_FALLBACK_MODEL, key_count=len(keys))
+                for key in keys:
+                    try:
+                        response_json = _call_gemini(key, GEMINI_FALLBACK_MODEL, prompt, temperature=temperature)
+                        used_model, used_provider = GEMINI_FALLBACK_MODEL, "gemini"
+                        break
+                    except Exception as e:
+                        last_error = e
+                        LLM_CALLS.labels(provider="gemini", model=GEMINI_FALLBACK_MODEL, endpoint=endpoint_name, outcome="error").inc()
+                        log.warning("gemini_key_failed", key_suffix=key[-4:], model=GEMINI_FALLBACK_MODEL, error=str(e))
 
-    latency = time.time() - start_time
+        # ── Pass 3: OpenAI safety net ─────────────────────────────────────────
+        if response_json is None:
+            openai_key = _load_openai_key()
+            if openai_key:
+                log.info("falling_back_to_openai", model=OPENAI_MODEL)
+                try:
+                    response_json = _call_openai(openai_key, prompt, temperature=temperature)
+                    used_model, used_provider = OPENAI_MODEL, "openai"
+                except Exception as e:
+                    last_error = e
+                    LLM_CALLS.labels(provider="openai", model=OPENAI_MODEL, endpoint=endpoint_name, outcome="error").inc()
+                    log.warning("openai_fallback_failed", error=str(e))
+
+        if response_json is None:
+            span.set_attribute("llm.outcome", "all_providers_failed")
+            log.error("all_llm_providers_failed", last_error=str(last_error), endpoint_name=endpoint_name)
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    f"All AI providers failed. Last error: {last_error}. "
+                    "Check GEMINI_API_KEY_* and OPENAI_API_KEY in .env."
+                ),
+            )
+
+        latency = time.time() - start_time
+        span.set_attribute("llm.provider", used_provider)
+        span.set_attribute("llm.model", used_model)
+        span.set_attribute("llm.latency_seconds", latency)
+
+        LLM_LATENCY.labels(provider=used_provider, model=used_model, endpoint=endpoint_name).observe(latency)
+        LLM_CALLS.labels(provider=used_provider, model=used_model, endpoint=endpoint_name, outcome="success").inc()
+
+    used_model = f"{used_provider}/{used_model}"
 
     # ── Parse response ──────────────────────────────────────────────────────
     try:
@@ -240,6 +276,20 @@ def ai(
         total_tokens      = usage.get("total_tokens", 0)
     except (KeyError, IndexError, ValueError):
         raise HTTPException(status_code=502, detail="Unexpected response format from AI provider")
+
+    LLM_TOKENS.labels(provider=used_provider, model=used_model.split("/", 1)[-1], token_type="prompt").inc(prompt_tokens)
+    LLM_TOKENS.labels(provider=used_provider, model=used_model.split("/", 1)[-1], token_type="completion").inc(completion_tokens)
+
+    log.info(
+        "llm_call_completed",
+        provider=used_provider,
+        model=used_model,
+        endpoint_name=endpoint_name,
+        latency_seconds=round(latency, 3),
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
 
     # ── Log to database ─────────────────────────────────────────────────────
     db = SessionLocal()
@@ -259,7 +309,7 @@ def ai(
         db.refresh(log_record)
         log_id = log_record.id
     except Exception as db_err:
-        print(f"Failed to log AI call to DB: {db_err}")
+        log.error("ai_log_db_write_failed", error=str(db_err))
     finally:
         db.close()
 

@@ -1,9 +1,14 @@
 import os
+import time
 import requests
-import logging
 from fastapi import HTTPException
 
-logger = logging.getLogger(__name__)
+from app.core.logging_config import get_logger
+from app.core.metrics import EMBEDDING_LATENCY
+from app.core.tracing import get_tracer
+
+logger = get_logger(__name__)
+tracer = get_tracer(__name__)
 
 # Correct REST endpoint format:
 # POST https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent?key={API_KEY}
@@ -50,25 +55,34 @@ def _embed(text: str, task_type: str) -> list[float]:
         "taskType": task_type,
     }
 
-    for api_key in keys:
-        try:
-            response = requests.post(
-                url,
-                params={"key": api_key},   # key in query string, NOT in headers
-                json=payload,
-                timeout=30,
-            )
-            response.raise_for_status()
-            return response.json()["embedding"]["values"]
-        except Exception as e:
-            last_error = e
-            body = ""
+    start = time.time()
+    with tracer.start_as_current_span("embedding_search") as span:
+        span.set_attribute("embedding.task_type", task_type)
+        span.set_attribute("embedding.text_length", len(text))
+
+        for api_key in keys:
             try:
-                body = response.text[:200] if 'response' in locals() else ""
-            except Exception:
-                pass
-            logger.warning(f"Embedding failed with key ...{api_key[-4:]}: {e} {body}")
-            continue
+                response = requests.post(
+                    url,
+                    params={"key": api_key},   # key in query string, NOT in headers
+                    json=payload,
+                    timeout=30,
+                )
+                response.raise_for_status()
+                EMBEDDING_LATENCY.labels(task_type=task_type).observe(time.time() - start)
+                span.set_attribute("embedding.key_attempts", keys.index(api_key) + 1)
+                return response.json()["embedding"]["values"]
+            except Exception as e:
+                last_error = e
+                body = ""
+                try:
+                    body = response.text[:200] if 'response' in locals() else ""
+                except Exception:
+                    pass
+                logger.warning("embedding_key_failed", key_suffix=api_key[-4:], error=str(e), body=body)
+                continue
+
+        span.set_attribute("embedding.outcome", "all_keys_failed")
 
     raise HTTPException(
         status_code=502,
