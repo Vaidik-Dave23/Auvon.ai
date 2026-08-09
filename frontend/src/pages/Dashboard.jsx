@@ -58,49 +58,105 @@ function Dashboard() {
     if (!newTask.trim()) return;
     setTaskError("");
 
+    const taskTitle = newTask;
+    const tempId = `temp-${Date.now()}`;
+    const optimisticTask = { id: tempId, title: taskTitle, done: false };
+
+    const prevTasks = tasks;
+    const prevDaily = daily;
+
+    // 1. Optimistic Tasks update
+    setTasks([...tasks, optimisticTask]);
+    setNewTask("");
+
+    // 2. Optimistic Daily Progress update
+    if (daily) {
+      const newTotalCount = daily.total + 1;
+      const newPercent = Math.round((daily.done / newTotalCount) * 100);
+      setDaily({
+        ...daily,
+        total: newTotalCount,
+        percent: newPercent
+      });
+    }
+
     try {
-      await api.post(`/tasks?title=${encodeURIComponent(newTask)}`);
-      setNewTask("");
-      // Refresh task list & stats
-      const [tasksRes, dailyRes] = await Promise.all([
-        api.get("/tasks"),
-        api.get("/progress/daily")
-      ]);
-      setTasks(tasksRes.data);
-      setDaily(dailyRes.data);
+      const res = await api.post(`/tasks?title=${encodeURIComponent(taskTitle)}`);
+      // Reconcile the temp ID with the database ID
+      setTasks(current => current.map(t => t.id === tempId ? res.data : t));
     } catch (err) {
       console.error(err);
+      setTasks(prevTasks);
+      setDaily(prevDaily);
       setTaskError("Failed to add task.");
     }
   };
 
   // TOGGLE TASK
   const toggleTask = async (id) => {
+    const prevTasks = tasks;
+    const prevDaily = daily;
+
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+
+    const newDone = !task.done;
+
+    // 1. Optimistic Tasks update
+    setTasks(tasks.map(t => t.id === id ? { ...t, done: newDone } : t));
+
+    // 2. Optimistic Daily Progress update
+    if (daily) {
+      const delta = newDone ? 1 : -1;
+      const newDoneCount = Math.max(0, daily.done + delta);
+      const newPercent = daily.total > 0 ? Math.round((newDoneCount / daily.total) * 100) : 0;
+      setDaily({
+        ...daily,
+        done: newDoneCount,
+        percent: newPercent
+      });
+    }
+
     try {
       await api.put(`/tasks/${id}`);
-      const [tasksRes, dailyRes] = await Promise.all([
-        api.get("/tasks"),
-        api.get("/progress/daily")
-      ]);
-      setTasks(tasksRes.data);
-      setDaily(dailyRes.data);
     } catch (err) {
       console.error(err);
+      setTasks(prevTasks);
+      setDaily(prevDaily);
+      setTaskError("Failed to update task. Reverted.");
     }
   };
 
   // DELETE TASK
   const deleteTask = async (id) => {
+    const prevTasks = tasks;
+    const prevDaily = daily;
+
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+
+    // 1. Optimistic Tasks update
+    setTasks(tasks.filter(t => t.id !== id));
+
+    // 2. Optimistic Daily Progress update
+    if (daily) {
+      const newTotalCount = Math.max(0, daily.total - 1);
+      const newDoneCount = task.done ? Math.max(0, daily.done - 1) : daily.done;
+      const newPercent = newTotalCount > 0 ? Math.round((newDoneCount / newTotalCount) * 100) : 0;
+      setDaily({
+        total: newTotalCount,
+        done: newDoneCount,
+        percent: newPercent
+      });
+    }
+
     try {
       await api.delete(`/tasks/${id}`);
-      const [tasksRes, dailyRes] = await Promise.all([
-        api.get("/tasks"),
-        api.get("/progress/daily")
-      ]);
-      setTasks(tasksRes.data);
-      setDaily(dailyRes.data);
     } catch (err) {
       console.error(err);
+      setTasks(prevTasks);
+      setDaily(prevDaily);
+      setTaskError("Failed to delete task. Reverted.");
     }
   };
 

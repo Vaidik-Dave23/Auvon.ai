@@ -10,6 +10,9 @@ from app.core.tracing import get_tracer
 logger = get_logger(__name__)
 tracer = get_tracer(__name__)
 
+_session = requests.Session()
+_session.mount("https://", requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20))
+
 # Correct REST endpoint format:
 # POST https://generativelanguage.googleapis.com/v1beta/models/{model}:embedContent?key={API_KEY}
 GEMINI_EMBED_MODEL = "gemini-embedding-001"
@@ -41,9 +44,22 @@ def _embed(text: str, task_type: str) -> list[float]:
     """
     Call Gemini embedContent REST API trying all available keys.
     """
+    import hashlib
+    import json
+    from app.core.cache import redis_client
+
     text = text.strip()[:8000]
     if not text:
         raise HTTPException(status_code=400, detail="Cannot embed empty text")
+
+    cache_key = f"emb:{task_type}:{hashlib.sha256(text.encode()).hexdigest()}"
+    if redis_client:
+        try:
+            cached_val = redis_client.get(cache_key)
+            if cached_val:
+                return json.loads(cached_val)
+        except Exception as e:
+            logger.warning("embedding_cache_read_failed", error=str(e))
 
     keys = _load_gemini_keys()
     last_error = None
@@ -62,7 +78,7 @@ def _embed(text: str, task_type: str) -> list[float]:
 
         for api_key in keys:
             try:
-                response = requests.post(
+                response = _session.post(
                     url,
                     params={"key": api_key},   # key in query string, NOT in headers
                     json=payload,
@@ -71,7 +87,14 @@ def _embed(text: str, task_type: str) -> list[float]:
                 response.raise_for_status()
                 EMBEDDING_LATENCY.labels(task_type=task_type).observe(time.time() - start)
                 span.set_attribute("embedding.key_attempts", keys.index(api_key) + 1)
-                return response.json()["embedding"]["values"]
+                
+                embedding_values = response.json()["embedding"]["values"]
+                if redis_client:
+                    try:
+                        redis_client.setex(cache_key, 86400, json.dumps(embedding_values))
+                    except Exception as e:
+                        logger.warning("embedding_cache_write_failed", error=str(e))
+                return embedding_values
             except Exception as e:
                 last_error = e
                 body = ""

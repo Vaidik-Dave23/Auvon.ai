@@ -1,15 +1,18 @@
 from app.models.goal import Goal, Step
 from app.services.ai import generate_plan
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.utils.dependencies import get_verified_user
 from datetime import datetime
+from app.core.limiter import limiter
 
 router = APIRouter()
 
 @router.post("/goals/ai")
+@limiter.limit("5/minute")
 def create_goal_ai(
+    request: Request,
     title: str,
     weeks: int,
     db: Session = Depends(get_db),
@@ -65,12 +68,18 @@ def get_goals(db: Session = Depends(get_db), user=Depends(get_verified_user)):
     return result
 
 @router.put("/steps/{step_id}")
-def toggle_step(step_id: int, db: Session = Depends(get_db)):
-    step = db.query(Step).filter(Step.id == step_id).first()
+def toggle_step(
+    step_id: int,
+    db: Session = Depends(get_db),
+    user=Depends(get_verified_user)
+):
+    step = db.query(Step).join(Goal).filter(Step.id == step_id, Goal.user_id == user.id).first()
 
-    if step:
-        step.is_completed = 0 if step.is_completed else 1
-        db.commit()
+    if not step:
+        raise HTTPException(status_code=403, detail="Access denied or step not found")
+
+    step.is_completed = 0 if step.is_completed else 1
+    db.commit()
 
     return step
 

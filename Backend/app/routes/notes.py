@@ -1,6 +1,10 @@
-from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request
 from sqlalchemy.orm import Session
 from app.database import get_db
+from app.core.limiter import limiter
+from app.core.cache import redis_client
+import json
+import hashlib
 from app.models.notes import Notes, UserNotes
 from app.utils.hash import generate_hash
 from app.services.ai import generate_ai_notes, ai
@@ -107,8 +111,10 @@ def cosine_similarity(v1: list[float], v2: list[float]) -> float:
 
 # ── Background embedding task ─────────────────────────────────────────────────
 
+from concurrent.futures import ThreadPoolExecutor
+
 def embed_and_store_note_chunks(note_id: int, text: str):
-    """Chunk text and store embeddings. Re-embeds if content changes or cleans up stale chunks."""
+    """Chunk text and store embeddings in parallel. Re-embeds if content changes or cleans up stale chunks."""
     from app.database import SessionLocal
     db = SessionLocal()
     try:
@@ -116,17 +122,23 @@ def embed_and_store_note_chunks(note_id: int, text: str):
         db.query(DocumentChunk).filter(DocumentChunk.note_id == note_id).delete()
         db.commit()
 
-        chunks = chunk_text(text, max_chunk_size=1000, overlap=200)
-        stored = 0
-        for chunk_txt in chunks:
-            if not chunk_txt.strip():
-                continue
+        chunks = [c for c in chunk_text(text, max_chunk_size=1000, overlap=200) if c.strip()]
+
+        def _embed_safe(c):
             try:
-                embedding = get_embedding(chunk_txt)   # document-side embedding
-                db.add(DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=embedding))
-                stored += 1
+                return c, get_embedding(c)
             except Exception as e:
                 log.warning("chunk_embedding_failed", note_id=note_id, error=str(e))
+                return c, None
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            results = list(pool.map(_embed_safe, chunks))
+
+        stored = 0
+        for chunk_txt, embedding in results:
+            if embedding is not None:
+                db.add(DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=embedding, embedding_vec=embedding))
+                stored += 1
 
         db.commit()
         log.info("note_chunks_stored", note_id=note_id, chunks_stored=stored, chunks_total=len(chunks))
@@ -167,36 +179,76 @@ def search_notes(
 
     # 1. Try basic title search first (fast, precise, free)
     try:
-        matched_notes = db.query(Notes).filter(Notes.title.ilike(f"%{q}%")).all()
+        matched_notes = (
+            db.query(Notes)
+            .join(UserNotes, UserNotes.note_id == Notes.id)
+            .filter(UserNotes.user_id == user.id)
+            .filter(Notes.title.ilike(f"%{q}%"))
+            .all()
+        )
     except Exception as e:
         log.warning("title_search_failed", query=q, error=str(e))
 
-    # 2. Fallback to semantic search if title search didn't yield anything
+    # 2. Try pgvector semantic query first (fast, indexed)
     if not matched_notes:
         try:
             query_emb = get_query_embedding(q)
-            chunks = db.query(DocumentChunk).all()
-            
-            if chunks:
-                note_scores = {}
-                for chunk in chunks:
-                    sim = cosine_similarity(query_emb, chunk.embedding)
-                    if chunk.note_id not in note_scores or sim > note_scores[chunk.note_id]:
-                        note_scores[chunk.note_id] = sim
-                
-                # Sort note_ids by similarity score descending
-                sorted_notes = sorted(note_scores.items(), key=lambda x: x[1], reverse=True)
-                
-                # Take notes with similarity >= 0.70 (calibrated for gemini-embedding-001 narrow-cone baseline)
-                SIMILARITY_THRESHOLD = 0.70
-                matched_note_ids = [note_id for note_id, score in sorted_notes if score >= SIMILARITY_THRESHOLD]
-                
-                if matched_note_ids:
-                    # Fetch notes from DB maintaining the rank order
-                    notes_dict = {n.id: n for n in db.query(Notes).filter(Notes.id.in_(matched_note_ids)).all()}
-                    matched_notes = [notes_dict[nid] for nid in matched_note_ids if nid in notes_dict]
+            # Retrieve the closest chunks across the user's notes
+            # pgvector cosine_distance = 1 - cosine_similarity. So similarity >= 0.70 means distance <= 0.30
+            raw_chunks = (
+                db.query(DocumentChunk)
+                .join(Notes, Notes.id == DocumentChunk.note_id)
+                .join(UserNotes, UserNotes.note_id == Notes.id)
+                .filter(UserNotes.user_id == user.id)
+                .filter(DocumentChunk.embedding_vec.cosine_distance(query_emb) <= 0.30)
+                .order_by(DocumentChunk.embedding_vec.cosine_distance(query_emb))
+                .limit(20)
+                .all()
+            )
+            if raw_chunks:
+                # Deduplicate notes and build matched list
+                seen_note_ids = set()
+                for c in raw_chunks:
+                    if c.note_id not in seen_note_ids:
+                        seen_note_ids.add(c.note_id)
+                        # Fetch the note itself
+                        note_obj = db.query(Notes).filter(Notes.id == c.note_id).first()
+                        if note_obj:
+                            matched_notes.append(note_obj)
         except Exception as e:
-            log.warning("semantic_search_failed", query=q, error=str(e))
+            log.warning("pgvector_search_failed_falling_back_to_json_scan", error=str(e))
+            # Fallback to current memory-scan path
+            try:
+                query_emb = get_query_embedding(q)
+                chunks = (
+                    db.query(DocumentChunk)
+                    .join(Notes, Notes.id == DocumentChunk.note_id)
+                    .join(UserNotes, UserNotes.note_id == Notes.id)
+                    .filter(UserNotes.user_id == user.id)
+                    .all()
+                )
+                
+                if chunks:
+                    note_scores = {}
+                    for chunk in chunks:
+                        emb = chunk.embedding_vec if chunk.embedding_vec is not None else chunk.embedding
+                        sim = cosine_similarity(query_emb, emb)
+                        if chunk.note_id not in note_scores or sim > note_scores[chunk.note_id]:
+                            note_scores[chunk.note_id] = sim
+                    
+                    # Sort note_ids by similarity score descending
+                    sorted_notes = sorted(note_scores.items(), key=lambda x: x[1], reverse=True)
+                    
+                    # Take notes with similarity >= 0.70 (calibrated for gemini-embedding-001 narrow-cone baseline)
+                    SIMILARITY_THRESHOLD = 0.70
+                    matched_note_ids = [note_id for note_id, score in sorted_notes if score >= SIMILARITY_THRESHOLD]
+                    
+                    if matched_note_ids:
+                        # Fetch notes from DB maintaining the rank order
+                        notes_dict = {n.id: n for n in db.query(Notes).filter(Notes.id.in_(matched_note_ids)).all()}
+                        matched_notes = [notes_dict[nid] for nid in matched_note_ids if nid in notes_dict]
+            except Exception as inner_e:
+                log.warning("semantic_search_failed", query=q, error=str(inner_e))
 
     # 3. Associate matched notes with the user so they don't get 403 on view/query
     if matched_notes:
@@ -217,7 +269,9 @@ def search_notes(
 
 
 @router.post("/generate")
+@limiter.limit("10/minute")
 def generate_notes(
+    request: Request,
     query: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -257,7 +311,9 @@ def get_my_notes(db: Session = Depends(get_db), user=Depends(get_verified_user))
 
 
 @router.post("/pdf")
+@limiter.limit("5/minute")
 async def generate_from_pdf(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
@@ -297,7 +353,9 @@ async def generate_from_pdf(
 
 
 @router.post("/{note_id}/query")
+@limiter.limit("15/minute")
 def query_note(
+    request: Request,
     note_id: int,
     query: str,
     background_tasks: BackgroundTasks,
@@ -314,6 +372,17 @@ def query_note(
     note = db.query(Notes).filter(Notes.id == note_id).first()
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
+
+    # ── Cache Check ───────────────────────────────────────────────────────────
+    cache_key = f"qa:{note_id}:{hashlib.sha256(query.strip().lower().encode()).hexdigest()}"
+    if redis_client:
+        try:
+            cached_res = redis_client.get(cache_key)
+            if cached_res:
+                log.info("qa_cache_hit", note_id=note_id, query=query)
+                return json.loads(cached_res)
+        except Exception as e:
+            log.warning("qa_cache_read_failed", error=str(e))
 
     # ── Query embedding (RETRIEVAL_QUERY task type) ───────────────────────────
     try:
@@ -335,7 +404,7 @@ def query_note(
                     continue
                 try:
                     emb = get_embedding(chunk_txt)
-                    chunk_obj = DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=emb)
+                    chunk_obj = DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=emb, embedding_vec=emb)
                     db.add(chunk_obj)
                     chunks.append(chunk_obj)
                 except Exception as e:
@@ -348,11 +417,11 @@ def query_note(
         raise HTTPException(status_code=400, detail="No retrievable content found for this note")
 
     # ── Score + rank ──────────────────────────────────────────────────────────
-    scored = sorted(
-        [(cosine_similarity(query_emb, c.embedding), c.chunk_text) for c in chunks],
-        key=lambda x: x[0],
-        reverse=True,
-    )
+    scored = []
+    for c in chunks:
+        emb = c.embedding_vec if c.embedding_vec is not None else c.embedding
+        scored.append((cosine_similarity(query_emb, emb), c.chunk_text))
+    scored.sort(key=lambda x: x[0], reverse=True)
 
     # Dynamic top-k: take top 5 but drop any with score < 0.3 (likely irrelevant)
     SIMILARITY_THRESHOLD = 0.3
@@ -417,8 +486,16 @@ def query_note(
         temperature=0.0,
     )
 
-    return {
+    res = {
         "answer": answer,
         "sources": [text for _, text in top_chunks],
         "scores": [round(score, 3) for score, _ in top_chunks],
     }
+
+    if redis_client:
+        try:
+            redis_client.setex(cache_key, 3600, json.dumps(res))
+        except Exception as e:
+            log.warning("qa_cache_write_failed", error=str(e))
+
+    return res

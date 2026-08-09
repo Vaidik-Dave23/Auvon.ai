@@ -18,6 +18,9 @@ load_dotenv()
 log = get_logger(__name__)
 tracer = get_tracer(__name__)
 
+_session = requests.Session()
+_session.mount("https://", requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20))
+
 # ---------------------------------------------------------------------------
 # Provider configuration
 # ---------------------------------------------------------------------------
@@ -112,13 +115,13 @@ def _load_openai_key() -> str | None:
 def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 90, temperature: float = None) -> dict:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
-    max_retries = 3
+    max_retries = 2
     for attempt in range(max_retries):
         try:
             payload = {"model": model, "messages": messages}
             if temperature is not None:
                 payload["temperature"] = temperature
-            resp = requests.post(GEMINI_BASE_URL, headers=headers, json=payload, timeout=timeout)
+            resp = _session.post(GEMINI_BASE_URL, headers=headers, json=payload, timeout=timeout)
             
             if resp.status_code == 200:
                 return resp.json()
@@ -128,17 +131,9 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 
                     _mark_daily_exhausted(api_key)
                     raise RuntimeError(f"Daily quota exhausted on {model}")
                 
-                sleep_time = (attempt + 1) * 3
-                log.warning(
-                    "gemini_rate_limited",
-                    key_suffix=api_key[-4:],
-                    model=model,
-                    attempt=attempt + 1,
-                    max_retries=max_retries,
-                    backoff_seconds=sleep_time,
-                )
-                time.sleep(sleep_time)
-                continue
+                # per-minute limit on THIS key: don't sleep-and-retry the same key,
+                # just bail so the caller moves to the next key in the list
+                raise RuntimeError("per-minute rate limited, trying next key")
                 
             if resp.status_code == 401:
                 raise RuntimeError("Invalid Gemini API key (401)")
@@ -147,7 +142,7 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 
             
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
-                sleep_time = (attempt + 1) * 3
+                sleep_time = 1
                 log.warning(
                     "gemini_connection_error",
                     model=model,
@@ -167,7 +162,7 @@ def _call_openai(api_key: str, messages: list[dict], timeout: int = 90, temperat
     payload = {"model": OPENAI_MODEL, "messages": messages}
     if temperature is not None:
         payload["temperature"] = temperature
-    resp = requests.post(OPENAI_BASE_URL, headers=headers, json=payload, timeout=timeout)
+    resp = _session.post(OPENAI_BASE_URL, headers=headers, json=payload, timeout=timeout)
 
     if resp.status_code == 429:
         raise RuntimeError("OpenAI rate limit (429)")

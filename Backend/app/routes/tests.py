@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
 from sqlalchemy.orm import Session
 from datetime import datetime
 
@@ -14,6 +14,7 @@ from app.schemas.test import (
 from app.services.ai import generate_questions, generate_weak_topic_review
 from app.utils.dependencies import get_verified_user
 from app.core.logging_config import get_logger
+from app.core.limiter import limiter
 
 log = get_logger(__name__)
 from app.models.user_answer import UserAnswer
@@ -23,7 +24,9 @@ router = APIRouter(prefix="/tests", tags=["tests"])
 
 # 🔥 GENERATE TEST
 @router.post("/generate", response_model=TestGenerateResponse)
+@limiter.limit("5/minute")
 async def generate_test(
+    request: Request,
     topic: str = Form(None),
     difficulty: str = Form("easy"),
     num_questions: int = Form(5),
@@ -121,6 +124,9 @@ def get_tests(db: Session = Depends(get_db), user=Depends(get_verified_user)):
 # 📊 SUBMIT TEST
 @router.post("/submit", response_model=TestSubmitResponse)
 def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Depends(get_verified_user)):
+    test = db.query(Test).filter(Test.id == data.test_id, Test.user_id == user.id).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
 
     questions = db.query(Question).filter(Question.test_id == data.test_id).all()
 
@@ -282,6 +288,10 @@ def delete_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_ve
 # 🧪 GET TEST
 @router.get("/{test_id}")
 def get_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_verified_user)):
+    test = db.query(Test).filter(Test.id == test_id, Test.user_id == user.id).first()
+    if not test:
+        raise HTTPException(status_code=404, detail="Test not found")
+
     questions = db.query(Question).filter(Question.test_id == test_id).all()
 
     if not questions:

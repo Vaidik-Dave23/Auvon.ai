@@ -62,22 +62,33 @@ function Goals() {
   };
 
   const toggleStep = async (stepId) => {
+    const prev = goals;
+    setGoals(goals.map(g => ({
+      ...g,
+      weeks: Object.fromEntries(Object.entries(g.weeks).map(([wk, steps]) => [
+        wk, steps.map(s => s.id === stepId ? { ...s, done: s.done ? 0 : 1 } : s)
+      ]))
+    })));
+
     try {
       await api.put(`/steps/${stepId}`);
-      fetchGoals();
     } catch (err) {
       console.log(err);
+      setGoals(prev);
     }
   };
 
   const deleteGoal = async (id) => {
     if (!confirm("Delete this goal?")) return;
 
+    const prev = goals;
+    setGoals(goals.filter(g => g.id !== id));
+
     try {
       await api.delete(`/goals/${id}`);
-      fetchGoals();
     } catch (err) {
       console.log(err);
+      setGoals(prev);
     }
   };
 

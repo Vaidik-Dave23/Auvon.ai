@@ -9,6 +9,8 @@ pydantic-settings==2.14.1
 SQLAlchemy==2.0.49
 asyncpg==0.31.0
 psycopg2-binary==2.9.11
+pgvector>=0.3.0
+alembic>=1.13.0
 
 # --- Auth & Security ---
 python-jose==3.5.0
@@ -30,6 +32,8 @@ python-dotenv==1.2.2
 PyMuPDF==1.27.2.2
 pandas==3.0.3
 numpy==1.26.4
+redis>=5.0.0
+slowapi>=0.1.9
 
 email-validator==2.3.0
 

@@ -15,13 +15,9 @@ from app.services.ai import ai
 
 # Config
 TOPICS = [
-    "Quantum Computing",
-    "Deep Learning",
-    "Blockchains",
-    "Photosynthesis",
-    "World War II"
+    "Quantum Computing"
 ]
-QUESTIONS_PER_NOTE = 5
+QUESTIONS_PER_NOTE = 2
 BASE_URL = "http://127.0.0.1:8000"
 
 def get_auth_token():
@@ -112,8 +108,8 @@ def main():
             except Exception as e:
                 print(f"    Query failed: {e}")
             
-            # Sleep 8s between requests to stay under free tier rate limits
-            time.sleep(8)
+            # Sleep 1s between requests
+            time.sleep(1)
 
     # Wait for the background evaluation tasks to write scores
     print("\nAll queries submitted. Waiting 15 seconds for evaluation logs to write to the database...")

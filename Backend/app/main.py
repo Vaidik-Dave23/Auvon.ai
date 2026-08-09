@@ -47,6 +47,16 @@ with engine.connect() as conn:
         log.warning("db_migration_note", error=str(e))
 
 app = FastAPI()
+
+from slowapi.errors import RateLimitExceeded
+from slowapi import _rate_limit_exceeded_handler
+from app.core.limiter import limiter
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 origins = [
     "https://auvon-ai.vercel.app",
     "https://auvon-be0imxvrg-vaidik-dave23s-projects.vercel.app",
