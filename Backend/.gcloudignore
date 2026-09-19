@@ -1,0 +1,10 @@
+.git
+.gcloudignore
+.venv
+__pycache__
+*.pyc
+*.pyo
+.env
+.env.bak
+.vscode
+.idea

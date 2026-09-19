@@ -9,6 +9,7 @@ class Test(Base):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     topic = Column(String)
+    difficulty = Column(String, nullable=False, server_default='easy')
     created_at = Column(String)
 
     questions = relationship("Question", back_populates="test", cascade="all, delete-orphan")
@@ -21,7 +22,7 @@ class Question(Base):
     test_id = Column(Integer, ForeignKey('tests.id'))
 
     question_text = Column(String)
-    options = Column(JSON)  
+    options = Column(JSON)
     correct_answer = Column(String)
 
     test = relationship("Test", back_populates="questions")

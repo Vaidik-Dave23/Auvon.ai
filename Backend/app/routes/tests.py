@@ -64,6 +64,7 @@ async def generate_test(
     new_test = Test(
         user_id=user.id,
         topic=test_topic,
+        difficulty=difficulty,
         created_at=datetime.utcnow().isoformat()
     )
     db.add(new_test)
@@ -112,6 +113,7 @@ def get_tests(db: Session = Depends(get_db), user=Depends(get_verified_user)):
         response.append({
             "test_id": t.id,
             "topic": t.topic,
+            "difficulty": t.difficulty,
             "score": r.last_score if r else None,
             "best_score": r.best_score if r else None,
             "created_at": t.created_at,

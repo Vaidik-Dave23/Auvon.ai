@@ -31,7 +31,7 @@ def get_current_user(
 
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        
+
         request.state.user_id = user_id
 
     except JWTError:
@@ -47,11 +47,21 @@ def get_current_user(
             logger.warning("user_cache_read_failed", error=str(e))
 
     if cached_user:
-        user = User(
-            id=cached_user["id"],
-            name=cached_user["name"],
-            email=cached_user["email"],
-            is_verified=cached_user["is_verified"]
+        # IMPORTANT: do not just instantiate User(...) here. An object built this
+        # way is transient — it was never added to `db`'s session, so a later
+        # db.commit()/db.refresh() on it (e.g. in PUT /me) either silently fails
+        # to persist or raises InvalidRequestError. db.merge(..., load=False)
+        # attaches the cached state to the session's identity map WITHOUT
+        # emitting a SELECT, so we keep the caching benefit while ending up
+        # with a real, persistent, writable instance.
+        user = db.merge(
+            User(
+                id=cached_user["id"],
+                name=cached_user["name"],
+                email=cached_user["email"],
+                is_verified=cached_user["is_verified"]
+            ),
+            load=False
         )
     else:
         user = db.query(User).filter(User.id == user_id).first()
