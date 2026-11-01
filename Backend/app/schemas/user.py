@@ -32,4 +32,8 @@ class Token(BaseModel):
     token_type: str
 
 class VerifyEmailRequest(BaseModel):
-    code: str
+    code: str
+
+class GoogleAuthRequest(BaseModel):
+    credential: str
+

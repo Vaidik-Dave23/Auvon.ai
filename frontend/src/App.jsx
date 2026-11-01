@@ -9,6 +9,7 @@ import Profile from "./pages/Profile";
 
 import Dashboard from "./pages/Dashboard";
 import Goal from "./pages/Goal";
+import GoalWorkspace from "./pages/GoalWorkspace";
 import Notes from "./pages/Notes";
 import NoteReader from "./pages/NoteReader";
 import Login from "./pages/Login";
@@ -17,6 +18,7 @@ import VerifyEmail from "./pages/VerifyEmail";
 import Tests from "./pages/Tests";
 import TestAttempt from "./pages/TestAttempt";
 import TestResult from "./pages/TestResult";
+import VideoLesson from "./pages/VideoLesson";
 
 function App() {
   return (
@@ -35,6 +37,8 @@ function App() {
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
           <Route path="/goals" element={<ProtectedRoute><Goal /></ProtectedRoute>} />
+          <Route path="/goals/:goalId" element={<ProtectedRoute><GoalWorkspace /></ProtectedRoute>} />
+          <Route path="/learn/video/:videoId" element={<ProtectedRoute><VideoLesson /></ProtectedRoute>} />
           <Route path="/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />
           <Route path="/note/:id" element={<ProtectedRoute><NoteReader /></ProtectedRoute>} />
           <Route path="/tests" element={<ProtectedRoute><Tests /></ProtectedRoute>} />

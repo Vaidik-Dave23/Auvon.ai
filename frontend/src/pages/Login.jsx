@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import { authQuote } from "../content/authQuote";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 
 function Login() {
   const [email, setEmail] = useState("");
@@ -129,6 +130,20 @@ function Login() {
               )}
             </button>
           </form>
+
+          <div className="relative flex py-1 items-center">
+            <div className="flex-grow border-t border-border-subtle"></div>
+            <span className="flex-shrink mx-4 text-xs uppercase tracking-wider text-text-tertiary font-medium">
+              Or continue with
+            </span>
+            <div className="flex-grow border-t border-border-subtle"></div>
+          </div>
+
+          <GoogleAuthButton
+            mode="signin"
+            onError={(msg) => setError(msg)}
+            loading={loading}
+          />
 
           <div className="text-sm text-text-secondary mt-2">
             No account yet?{" "}

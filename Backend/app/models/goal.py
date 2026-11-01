@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from app.models.user import User
@@ -11,7 +11,7 @@ class Goal(Base):
     user_id = Column(Integer, ForeignKey('users.id'))
     title = Column(String)
     created_at = Column(String)  # ISO format timestamp
-    steps=relationship("Step", back_populates="goal", cascade="all, delete-orphan")
+    steps = relationship("Step", back_populates="goal", cascade="all, delete-orphan")
 
     user = relationship("User")
 
@@ -23,5 +23,7 @@ class Step(Base):
     description = Column(String)
     is_completed = Column(Integer)
     week = Column(Integer)
+    videos = Column(JSON, nullable=True, default=list)
 
     goal = relationship("Goal", back_populates="steps")
+

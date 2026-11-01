@@ -29,6 +29,7 @@ from app.routes import tasks
 from app.routes import stats
 from app.routes import goals
 from app.routes import tests
+from app.routes import videos
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -42,6 +43,7 @@ with engine.connect() as conn:
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE NOT NULL;"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code VARCHAR;"))
         conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_code_expires_at TIMESTAMP;"))
+        conn.execute(text("ALTER TABLE steps ADD COLUMN IF NOT EXISTS videos JSON;"))
         conn.commit()
     except Exception as e:
         log.warning("db_migration_note", error=str(e))
@@ -92,3 +94,4 @@ app.include_router(tasks.router)
 app.include_router(stats.router)
 app.include_router(goals.router)
 app.include_router(tests.router)
+app.include_router(videos.router)

@@ -6,6 +6,8 @@ import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
+import VideoCard from "../components/VideoCard";
+import { extractYouTubeId } from "../utils/youtube";
 
 const preprocessMarkdown = (content) => {
   if (!content) return "";
@@ -214,6 +216,38 @@ function NoteReader() {
                           </pre>
                         );
                       },
+                      a: ({ href, children, ...props }) => {
+                        const vidId = extractYouTubeId(href);
+                        if (vidId) {
+                          return (
+                            <div className="my-3 not-prose">
+                              <VideoCard
+                                video={{
+                                  id: vidId,
+                                  video_id: vidId,
+                                  title: typeof children === "string" ? children : `Video Lesson: ${vidId}`,
+                                  url: href,
+                                  embed_url: `https://www.youtube-nocookie.com/embed/${vidId}`,
+                                  type: "video",
+                                  verified: true,
+                                }}
+                                compact={true}
+                              />
+                            </div>
+                          );
+                        }
+                        return (
+                          <a
+                            href={href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-accent hover:underline font-medium"
+                            {...props}
+                          >
+                            {children}
+                          </a>
+                        );
+                      },
                     }}
                   >
                     {preprocessMarkdown(note.content)}
@@ -271,6 +305,38 @@ function NoteReader() {
                                         {children}
                                       </code>
                                     </pre>
+                                  );
+                                },
+                                a: ({ href, children, ...props }) => {
+                                  const vidId = extractYouTubeId(href);
+                                  if (vidId) {
+                                    return (
+                                      <div className="my-2 not-prose">
+                                        <VideoCard
+                                          video={{
+                                            id: vidId,
+                                            video_id: vidId,
+                                            title: typeof children === "string" ? children : `Video Lesson: ${vidId}`,
+                                            url: href,
+                                            embed_url: `https://www.youtube-nocookie.com/embed/${vidId}`,
+                                            type: "video",
+                                            verified: true,
+                                          }}
+                                          compact={true}
+                                        />
+                                      </div>
+                                    );
+                                  }
+                                  return (
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-accent hover:underline font-medium"
+                                      {...props}
+                                    >
+                                      {children}
+                                    </a>
                                   );
                                 },
                               }}

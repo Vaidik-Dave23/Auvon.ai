@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from app.schemas.user import UserCreate, UserLogin, UserOut, UserUpdate, VerifyEmailRequest
+from app.schemas.user import UserCreate, UserLogin, UserOut, UserUpdate, VerifyEmailRequest, GoogleAuthRequest
 from app.utils.token import hash_password, verify_password, create_access_token
 from app.database import get_db
 from sqlalchemy.orm import Session
@@ -7,6 +7,10 @@ from app.models.user import User
 from app.utils.dependencies import get_current_user, get_verified_user
 from app.utils.mail import generate_otp, send_verification_email
 from datetime import datetime, timedelta
+import os
+import secrets
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
 
 router = APIRouter()
 
@@ -131,6 +135,102 @@ def resend_verification(
     
     send_verification_email(background_tasks, current_user.email, current_user.name, otp_code)
     return {"message": "Verification code resent successfully"}
+
+
+def _handle_google_auth(payload: GoogleAuthRequest, db: Session):
+    if not payload.credential or not payload.credential.strip():
+        raise HTTPException(status_code=400, detail="Missing Google authentication credential")
+
+    google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+    try:
+        id_info = id_token.verify_oauth2_token(
+            payload.credential.strip(),
+            google_requests.Request(),
+            audience=google_client_id if google_client_id else None
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Google authentication failed: {str(e)}")
+
+    issuer = id_info.get("iss", "")
+    if issuer not in ["accounts.google.com", "https://accounts.google.com"]:
+        raise HTTPException(status_code=401, detail=f"Invalid token issuer: {issuer}")
+
+    if not id_info.get("email_verified", False):
+        raise HTTPException(status_code=400, detail="Google account email is not verified")
+
+    email = id_info.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Google token does not contain an email address")
+
+    name = id_info.get("name") or id_info.get("given_name") or email.split("@")[0]
+
+    db_user = db.query(User).filter(User.email == email).first()
+    if not db_user:
+        random_password = hash_password(secrets.token_urlsafe(32))
+        db_user = User(
+            name=name,
+            email=email,
+            password=random_password,
+            is_verified=True,
+            created_at=datetime.utcnow(),
+            verification_code=None,
+            verification_code_expires_at=None
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+    else:
+        if not db_user.is_verified:
+            db_user.is_verified = True
+            db.commit()
+            db.refresh(db_user)
+
+    access_token = create_access_token(data={"sub": db_user.email, "id": db_user.id})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "is_verified": db_user.is_verified,
+        "user": {
+            "id": db_user.id,
+            "name": db_user.name,
+            "email": db_user.email,
+            "picture": id_info.get("picture")
+        }
+    }
+
+
+@router.post("/auth/google")
+def google_auth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """
+    Authenticate or register a user via Google OAuth 2.0 ID Token.
+    Validates token cryptographically and links or auto-provisions user.
+    """
+    return _handle_google_auth(payload, db)
+
+
+@router.post("/login/google")
+def google_login_alias(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
+    """
+    Alias for /auth/google to support flexible frontend routing.
+    """
+    return _handle_google_auth(payload, db)
+
+
+@router.post("/auth/refresh")
+@router.post("/refresh")
+def refresh_access_token(current_user: User = Depends(get_current_user)):
+    """
+    Issue a new JWT access token for persistent sessions.
+    """
+    access_token = create_access_token(data={"sub": current_user.email, "id": current_user.id})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "is_verified": current_user.is_verified
+    }
+
 
 
 

@@ -343,13 +343,20 @@ def _parse_json_response(raw: str, context: str):
 # ---------------------------------------------------------------------------
 
 def generate_plan(goal: str, weeks: int) -> list[dict]:
-    """Week-by-week study/action plan."""
+    """Week-by-week study/action plan with curated best resources (documentation, interactive labs, repos, and video tutorials)."""
     prompt = [
         {
             "role": "system",
             "content": (
                 "You are an elite learning coach who creates razor-sharp, highly specific learning plans. "
                 "Your plans are concrete, measurable, and immediately actionable — never vague or generic. "
+                "For each milestone, determine the BEST learning resource modality: "
+                "1. If reading official documentation or specifications is best, specify resource_type='doc' and provide resource_title. "
+                "2. If hands-on interactive practice, labs, or exercises are best, specify resource_type='lab'. "
+                "3. If an open-source tool, CLI, or starter repository is best, specify resource_type='repo'. "
+                "4. If a visual demonstration, screencast, or lecture is needed, specify resource_type='video' with a concise 'video_query'. "
+                "CRITICAL: Do NOT give only videos for everything. Use whatever is the best resource for each specific task. "
+                "NEVER fabricate YouTube URLs or video IDs. "
                 "Respond ONLY with a valid JSON array. No markdown, no explanation, no extra text whatsoever."
             ),
         },
@@ -361,12 +368,29 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
                 f"- The JSON array MUST contain EXACTLY {weeks} element(s).\n"
                 "- Each week must build progressively on the previous one.\n"
                 "- Each step must be specific and immediately actionable (include tools, resources, durations, or metrics where possible).\n"
-                "- Avoid generic advice like 'study more' or 'practice daily' — be precise.\n\n"
+                "- Choose the BEST resource modality for each task (doc, lab, repo, or video). DO NOT recommend only videos.\n"
+                "- For tasks where a video tutorial is genuinely best, provide 'video_query' with concise search keywords.\n"
+                "- For reading/reference tasks, provide resource_type='doc'. For practice/labs, provide resource_type='lab'.\n"
+                "- DO NOT invent YouTube URLs or IDs.\n\n"
                 "Return a JSON array where each element has:\n"
                 '  "week": week number as integer (1-indexed)\n'
-                '  "steps": array of exactly 3 specific, practical, measurable tasks (strings)\n\n'
+                '  "steps": array of exactly 3 tasks, where each task is an object with:\n'
+                '     "text": specific task description string\n'
+                '     "resource_type": "doc" | "lab" | "repo" | "video"\n'
+                '     "resource_title": title of the recommended resource\n'
+                '     "resource_url": optional official documentation or lab URL (or null)\n'
+                '     "video_query": search keywords string if video tutorial is needed (or null)\n\n'
                 f"Example format for {weeks} week(s):\n"
-                + str([{"week": i, "steps": ["Specific task with tool/metric", "Specific task with milestone", "Specific task with outcome"]} for i in range(1, weeks + 1)])
+                + json.dumps([
+                    {
+                        "week": i,
+                        "steps": [
+                            {"text": f"Study core architecture specifications and standards for milestone {i}", "resource_type": "doc", "resource_title": f"{goal} Official Documentation", "resource_url": None, "video_query": None},
+                            {"text": f"Complete hands-on interactive lab exercises for milestone {i}", "resource_type": "lab", "resource_title": f"{goal} Interactive Labs", "resource_url": None, "video_query": None},
+                            {"text": f"Watch step-by-step visual walkthrough and demonstration for milestone {i}", "resource_type": "video", "resource_title": f"{goal} Walkthrough Tutorial", "resource_url": None, "video_query": f"{goal} tutorial walkthrough"}
+                        ]
+                    } for i in range(1, weeks + 1)
+                ])
             ),
         },
     ]
@@ -380,8 +404,34 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
     for item in plan:
         if "week" not in item or "steps" not in item:
             raise HTTPException(status_code=502, detail="AI plan is missing required fields")
-        item["week"]  = int(item["week"])
-        item["steps"] = [str(s) for s in item["steps"]]
+        item["week"] = int(item["week"])
+        
+        normalized_steps = []
+        for s in item["steps"]:
+            if isinstance(s, dict):
+                text = str(s.get("text") or s.get("description") or s.get("title") or "").strip()
+                v_query = s.get("video_query")
+                if v_query:
+                    v_query = str(v_query).strip()
+                r_type = s.get("resource_type") or ("video" if v_query else "doc")
+                r_title = s.get("resource_title")
+                r_url = s.get("resource_url")
+                normalized_steps.append({
+                    "text": text,
+                    "video_query": v_query or None,
+                    "resource_type": str(r_type).lower().strip() if r_type else None,
+                    "resource_title": str(r_title).strip() if r_title else None,
+                    "resource_url": str(r_url).strip() if r_url else None,
+                })
+            else:
+                normalized_steps.append({
+                    "text": str(s).strip(),
+                    "video_query": None,
+                    "resource_type": None,
+                    "resource_title": None,
+                    "resource_url": None,
+                })
+        item["steps"] = normalized_steps
 
     return plan
 
@@ -577,3 +627,317 @@ def generate_weak_topic_review(weak_topics: list[str], score: int = None, total:
     ]
 
     return ai(prompt, endpoint_name="generate_weak_topic_review")
+
+
+# ---------------------------------------------------------------------------
+# Direct Gemini Multimodal Video Understanding
+# ---------------------------------------------------------------------------
+
+GEMINI_VIDEO_MODELS = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+
+
+def _call_gemini_video(
+    api_key: str,
+    youtube_url: str,
+    prompt: str,
+    model: str = "gemini-2.5-flash",
+    timeout_seconds: int = 120,
+    temperature: float = 0.3,
+    response_mime_type: str = None,
+) -> tuple[str, int, int]:
+    """
+    Call official Google GenAI SDK for multimodal YouTube video understanding.
+    Passes YouTube URL via types.Part.from_uri(file_uri=youtube_url, mime_type='video/*').
+    Returns (content_text, prompt_tokens, completion_tokens).
+    """
+    from google import genai
+    from google.genai import types
+    from google.genai.errors import ClientError, ServerError
+
+    client = genai.Client(api_key=api_key)
+    video_part = types.Part.from_uri(file_uri=youtube_url, mime_type="video/*")
+
+    config_kwargs = {
+        "temperature": temperature,
+        "http_options": types.HttpOptions(timeout=timeout_seconds * 1000),
+        "media_resolution": types.MediaResolution.MEDIA_RESOLUTION_LOW,
+        "thinking_config": types.ThinkingConfig(thinking_budget=0),
+    }
+    if response_mime_type:
+        config_kwargs["response_mime_type"] = response_mime_type
+
+    config = types.GenerateContentConfig(**config_kwargs)
+
+    try:
+        response = client.models.generate_content(
+            model=model,
+            contents=[video_part, prompt],
+            config=config,
+        )
+
+        content = response.text or ""
+        if not content.strip():
+            raise ValueError("Gemini returned an empty response for video understanding.")
+
+        usage = getattr(response, "usage_metadata", None)
+        prompt_tokens = getattr(usage, "prompt_token_count", 0) or 0
+        completion_tokens = getattr(usage, "candidates_token_count", 0) or 0
+
+        return content.strip(), prompt_tokens, completion_tokens
+
+    except ClientError as e:
+        err_msg = str(e)
+        code = getattr(e, "code", None)
+
+        # 400: Input token count exceeded or bad video format -> Video-level limitation
+        if code == 400 or "token count exceeds" in err_msg.lower():
+            raise ValueError(f"Video input exceeds model token capacity or is unsupported: {err_msg}")
+
+        # 429: Rate limit or daily quota exhausted
+        if code == 429:
+            if _is_daily_quota_error(err_msg):
+                _mark_daily_exhausted(api_key)
+                raise RuntimeError(f"Daily quota exhausted on {model}")
+            raise RuntimeError("Gemini per-minute rate limited on current key")
+
+        # 403: Key permissions / disabled / quota
+        if code == 403:
+            raise RuntimeError(f"Gemini API key permission/quota issue (403): {err_msg}")
+
+        # 404: Not found or inaccessible video
+        if code == 404:
+            raise ValueError(f"Video or model resource not found/accessible (404): {err_msg}")
+
+        raise RuntimeError(f"Gemini ClientError ({code}): {err_msg}")
+
+    except ServerError as e:
+        raise RuntimeError(f"Gemini ServerError: {e}")
+    except Exception as e:
+        raise RuntimeError(f"Gemini video request failed: {e}")
+
+
+def generate_video_content_with_gemini(
+    video_id: str,
+    prompt: str,
+    endpoint_name: str = "video_understanding",
+    response_mime_type: str = None,
+    temperature: float = 0.3,
+) -> str:
+    """
+    Direct multimodal YouTube video analysis with key rotation across Gemini models.
+    """
+    load_dotenv(override=True)
+    clean_id = video_id.strip()
+    youtube_url = f"https://www.youtube.com/watch?v={clean_id}"
+
+    keys = _load_gemini_keys()
+    if not keys:
+        raise RuntimeError("No active Gemini API keys available. Check GEMINI_API_KEY in .env.")
+
+    start_time = time.time()
+    last_error = None
+    response_text = None
+    used_model = None
+    prompt_tokens = 0
+    completion_tokens = 0
+
+    with tracer.start_as_current_span("gemini_video_generate") as span:
+        span.set_attribute("llm.endpoint_name", endpoint_name)
+        span.set_attribute("video.id", clean_id)
+
+        for model in GEMINI_VIDEO_MODELS:
+            keys = _load_gemini_keys()
+            for key in keys:
+                try:
+                    response_text, prompt_tokens, completion_tokens = _call_gemini_video(
+                        api_key=key,
+                        youtube_url=youtube_url,
+                        prompt=prompt,
+                        model=model,
+                        temperature=temperature,
+                        response_mime_type=response_mime_type,
+                    )
+                    used_model = model
+                    break
+                except ValueError as val_err:
+                    # Video-specific limitation (e.g. video token count > 1M tokens or video inaccessible)
+                    # Trying another key with the exact same video will yield the exact same error,
+                    # so we raise immediately to trigger the transcript fallback.
+                    log.warning("gemini_video_unsupported_input", video_id=clean_id, model=model, error=str(val_err))
+                    raise val_err
+                except Exception as exc:
+                    last_error = exc
+                    log.warning("gemini_video_key_failed", key_suffix=key[-4:], model=model, error=str(exc))
+                    LLM_CALLS.labels(provider="gemini", model=model, endpoint=endpoint_name, outcome="error").inc()
+
+            if response_text is not None:
+                break
+
+        if response_text is None:
+            span.set_attribute("llm.outcome", "all_gemini_video_keys_failed")
+            raise RuntimeError(f"All Gemini video processing keys/models failed. Last error: {last_error}")
+
+        latency = time.time() - start_time
+        span.set_attribute("llm.provider", "gemini")
+        span.set_attribute("llm.model", used_model)
+        span.set_attribute("llm.latency_seconds", latency)
+
+        LLM_LATENCY.labels(provider="gemini", model=used_model, endpoint=endpoint_name).observe(latency)
+        LLM_CALLS.labels(provider="gemini", model=used_model, endpoint=endpoint_name, outcome="success").inc()
+
+    # Log to AILog
+    total_tokens = prompt_tokens + completion_tokens
+    db = SessionLocal()
+    try:
+        log_record = AILog(
+            endpoint=f"{endpoint_name}_{used_model}",
+            prompt=f"Video URL: {youtube_url}\nPrompt: {prompt}",
+            response=response_text[:4000],
+            latency=latency,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+        )
+        db.add(log_record)
+        db.commit()
+    except Exception as db_err:
+        log.error("ai_log_db_write_failed", error=str(db_err))
+    finally:
+        db.close()
+
+    return response_text
+
+
+def generate_notes_from_youtube_direct(video_id: str, video_title: str) -> str:
+    """
+    Generate rich, structured, exam-ready study notes directly from YouTube video content.
+    Supports English, Hindi, and Hinglish lectures grounded in actual visual and spoken content.
+    """
+    notes_prompt = (
+        f"You are an elite academic professor and master notes author analyzing this YouTube educational lecture.\n"
+        f"Video Title: {video_title}\n"
+        f"Video URL: https://www.youtube.com/watch?v={video_id}\n\n"
+        "TASK:\n"
+        "Generate comprehensive, structured, exam-ready study notes grounded DIRECTLY in the spoken and visual instruction in this video.\n"
+        "The lecture may be conducted in English, Hindi, or Hinglish — preserve and accurately reflect the instructor's technical terminology, code syntax, architectural patterns, and practical explanations.\n\n"
+        "CRITICAL FORMATTING & STRUCTURE REQUIREMENTS:\n"
+        "Your response MUST be formatted strictly in clean GitHub-Flavored Markdown:\n\n"
+        f"# {video_title}\n\n"
+        "## 📌 Overview & Scope\n"
+        "Provide a 2-3 sentence executive breakdown detailing the exact technical problem, target architecture, or topic covered in this video lecture, along with key prerequisites.\n\n"
+        "## 🔑 Key Concepts & Definitions\n"
+        "Extract all foundational definitions, core principles, technical terminology, and operational mechanisms explained in the lecture. "
+        "Use bullet points. **Bold every specific term**, followed by its precise definition and significance.\n\n"
+        "## 📖 Detailed Section-by-Section Breakdown\n"
+        "Break the lecture into chronological logical sections or modules. For each section, explain the mechanics, workflow, or algorithm in depth. "
+        "Include actual code blocks, terminal commands, or ASCII diagrams if demonstrated in the video.\n\n"
+        "## 💡 Important Examples & Demonstrations\n"
+        "Detail the specific examples, real-world scenarios, problems solved, or hands-on demonstrations walked through in the video.\n\n"
+        "## ⚡ Quick-Reference Cheatsheet Table\n"
+        "Create a clean Markdown table mapping the most important commands, complexity bounds, methods, properties, or rules covered in the lecture.\n\n"
+        "## ⚠️ Gotchas & Common Pitfalls\n"
+        "Highlight tricky bugs, edge cases, common beginner mistakes, or optimization trade-offs warned about in the lecture.\n\n"
+        "## 🎯 Key Takeaways & Exam Revision Summary\n"
+        "Provide exactly 5 to 8 hyper-dense bullet points summarizing the must-know facts for instant review.\n"
+    )
+
+    notes = generate_video_content_with_gemini(
+        video_id=video_id,
+        prompt=notes_prompt,
+        endpoint_name="video_notes_direct",
+        temperature=0.3,
+    )
+
+    if len(notes.strip()) < 100:
+        raise ValueError("Generated notes response was unexpectedly short or incomplete.")
+
+    return notes
+
+
+def generate_quiz_from_youtube_direct(
+    video_id: str,
+    video_title: str,
+    num_questions: int = 5,
+    difficulty: str = "easy"
+) -> list[dict]:
+    """
+    Generate multiple-choice quiz questions directly grounded in YouTube video content.
+    Returns processed questions matching the QuestionOut schema and options format.
+    """
+    quiz_prompt = (
+        f"You are an expert academic examiner creating an interactive test based on this educational video.\n"
+        f"Video Title: {video_title}\n"
+        f"Video URL: https://www.youtube.com/watch?v={video_id}\n\n"
+        f"TASK:\n"
+        f"Generate exactly {num_questions} multiple-choice questions ({difficulty} difficulty) grounded STRICTLY in the facts, explanations, syntax, and demonstrations from this video.\n"
+        "Support English, Hindi, and Hinglish lectures by testing understanding of what was actually taught.\n\n"
+        "CRITICAL RULES:\n"
+        "1. Every question must be directly answered by the video content (do NOT invent hypothetical facts).\n"
+        "2. Each question must have EXACTLY 4 plausible options.\n"
+        "3. Exactly one option must be the correct answer.\n"
+        "4. Include a concise explanation explaining why the correct answer is right based on the video.\n\n"
+        "OUTPUT SCHEMA:\n"
+        "You MUST respond ONLY with a valid JSON array of objects conforming to this schema:\n"
+        "[\n"
+        "  {\n"
+        '    "question": "What is ...?",\n'
+        '    "options": ["Plain option 1", "Plain option 2", "Plain option 3", "Plain option 4"],\n'
+        '    "correct_answer": "Plain option 1",\n'
+        '    "explanation": "According to the video, ..."\n'
+        "  }\n"
+        "]\n"
+    )
+
+    raw_json = generate_video_content_with_gemini(
+        video_id=video_id,
+        prompt=quiz_prompt,
+        endpoint_name="video_quiz_direct",
+        response_mime_type="application/json",
+        temperature=0.2,
+    )
+
+    questions = _parse_json_response(raw_json, "video_quiz_direct")
+
+    if not isinstance(questions, list) or len(questions) == 0:
+        raise HTTPException(status_code=502, detail="AI returned no questions for video")
+
+    processed = []
+    for q in questions:
+        if not all(k in q for k in ("question", "options", "correct_answer")):
+            raise HTTPException(status_code=502, detail="AI question is missing required fields")
+        if len(q["options"]) != 4:
+            raise HTTPException(status_code=502, detail="AI question does not have exactly 4 options")
+
+        question_text = str(q["question"]).strip()
+        options = [str(o).strip() for o in q["options"]]
+        correct_text = str(q["correct_answer"]).strip()
+        explanation = str(q.get("explanation", "")).strip()
+
+        matched_correct = next(
+            (o for o in options if o.lower() == correct_text.lower()),
+            None
+        )
+        if not matched_correct:
+            matched_correct = next(
+                (o for o in options if o.lower().startswith(correct_text.lower()) or correct_text.lower().startswith(o.lower())),
+                correct_text,
+            )
+
+        random.shuffle(options)
+        if matched_correct not in options:
+            options[random.randint(0, 3)] = matched_correct
+
+        labelled_options = [f"Option {chr(65+i)}: {opt}" for i, opt in enumerate(options)]
+        correct_label = next(
+            (f"Option {chr(65+i)}: {opt}" for i, opt in enumerate(options) if opt == matched_correct),
+            labelled_options[0],
+        )
+
+        processed.append({
+            "question": question_text,
+            "options": labelled_options,
+            "correct_answer": correct_label,
+            "explanation": explanation,
+        })
+
+    return processed
