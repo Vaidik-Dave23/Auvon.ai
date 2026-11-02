@@ -1,15 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from sqlalchemy.orm import Session
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from datetime import datetime
 from pydantic import BaseModel, Field
 from threading import Lock
 import time
 
-from app.database import get_db
-from app.models.goal import Goal, Step
-from app.models.notes import Notes, UserNotes
-from app.models.test import Test, Question
+from app.database import (
+    get_db,
+    goals_col,
+    steps_col,
+    notes_col,
+    user_notes_col,
+    tests_col,
+    questions_col,
+    id_filter,
+    to_object_id,
+    serialize_doc,
+)
 from app.schemas.test import QuestionOut
 from app.services.youtube import (
     youtube_service,
@@ -34,7 +41,7 @@ log = get_logger(__name__)
 
 router = APIRouter(tags=["videos"])
 
-# In-flight operation locks to prevent duplicate submissions from accidental double-clicks
+# In-flight operation locks
 _active_video_operations: dict[str, float] = {}
 _ops_lock = Lock()
 
@@ -58,9 +65,6 @@ def _release_lock(key: str) -> None:
 
 
 def _build_video_failure_detail(direct_error: Optional[str], transcript_msg: Optional[str]) -> str:
-    """
-    Construct an informative, actionable error message distinguishing specific failure modes.
-    """
     err_lower = (direct_error or "").lower()
 
     if "token count exceeds" in err_lower or "too long" in err_lower or "maximum number of tokens" in err_lower:
@@ -85,8 +89,8 @@ def _build_video_failure_detail(direct_error: Optional[str], transcript_msg: Opt
 class VideoNotesRequest(BaseModel):
     title: Optional[str] = None
     custom_transcript: Optional[str] = None
-    step_id: Optional[int] = None
-    goal_id: Optional[int] = None
+    step_id: Optional[Union[int, str]] = None
+    goal_id: Optional[Union[int, str]] = None
     force_refresh: Optional[bool] = False
 
 
@@ -94,7 +98,7 @@ class VideoQuizRequest(BaseModel):
     num_questions: int = Field(5, ge=1, le=10)
     difficulty: str = Field("easy")
     custom_transcript: Optional[str] = None
-    step_id: Optional[int] = None
+    step_id: Optional[Union[int, str]] = None
     force_refresh: Optional[bool] = False
 
 
@@ -104,24 +108,16 @@ def search_videos(
     max_results: int = Query(3, ge=1, le=5),
     user = Depends(get_verified_user)
 ):
-    """
-    Search YouTube for relevant educational videos with graceful search fallback.
-    Must be defined before parameterized /videos/{video_id} route.
-    """
     return youtube_service.search_videos(query=q, max_results=max_results)
 
 
 @router.get("/videos/{video_id}")
 def get_video_info(
     video_id: str,
-    step_id: Optional[int] = Query(None, description="Optional associated roadmap step ID"),
-    db: Session = Depends(get_db),
+    step_id: Optional[Union[int, str]] = Query(None, description="Optional associated roadmap step ID"),
+    db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    """
-    Retrieve validated video metadata and embed configuration for the in-app lesson player.
-    Supports associating video with a specific roadmap task context.
-    """
     clean_id = extract_youtube_id(video_id)
     if not clean_id or not is_valid_youtube_id(clean_id):
         raise HTTPException(
@@ -129,32 +125,36 @@ def get_video_info(
             detail="Invalid YouTube video ID format. YouTube IDs must be 11 characters."
         )
 
-    # Fetch official metadata and embeddability check
     video_details = youtube_service.get_video_details(clean_id)
+    user_id_str = str(user.id)
 
     task_context = None
     goal_context = None
 
-    # If associated step is provided, check ownership and provide task context
     if step_id:
-        step = (
-            db.query(Step)
-            .join(Goal)
-            .filter(Step.id == step_id, Goal.user_id == user.id)
-            .first()
-        )
+        step = steps_col.find_one(id_filter(step_id))
+        goal = None
         if step:
+            goal = goals_col.find_one(id_filter(step.get("goal_id")))
+        else:
+            goal = goals_col.find_one({"steps.id": str(step_id), "user_id": user_id_str})
+            if goal:
+                for s in goal.get("steps", []):
+                    if str(s.get("id")) == str(step_id):
+                        step = s
+                        break
+
+        if step and goal and str(goal.get("user_id")) == user_id_str:
             task_context = {
-                "step_id": step.id,
-                "text": step.description,
-                "done": bool(step.is_completed),
-                "week": step.week,
+                "step_id": str(step.get("_id") or step.get("id")),
+                "text": step.get("description", ""),
+                "done": bool(step.get("is_completed")),
+                "week": step.get("week", 1),
             }
-            if step.goal:
-                goal_context = {
-                    "goal_id": step.goal.id,
-                    "title": step.goal.title,
-                }
+            goal_context = {
+                "goal_id": str(goal.get("_id") or goal.get("id")),
+                "title": goal.get("title", ""),
+            }
 
     return {
         **video_details,
@@ -168,10 +168,6 @@ def get_video_transcript_status(
     video_id: str,
     user = Depends(get_verified_user)
 ):
-    """
-    Check if an actual spoken transcript / subtitles can be retrieved from YouTube.
-    Returns status and preview without returning the entire full text if too large.
-    """
     clean_id = extract_youtube_id(video_id)
     if not clean_id or not is_valid_youtube_id(clean_id):
         raise HTTPException(status_code=400, detail="Invalid YouTube video ID format.")
@@ -193,22 +189,15 @@ def generate_notes_from_video(
     video_id: str,
     payload: VideoNotesRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    """
-    Generate structured AI study notes grounded in the video's actual visual and audio content.
-    Pipeline:
-      1. Direct Gemini multimodal video understanding (official google.genai integration).
-      2. Fallback to spoken transcript via youtube-transcript-api if direct analysis fails.
-      3. Graceful fallback to manual paste modal with specific, actionable failure diagnostics.
-    """
     clean_id = extract_youtube_id(video_id)
     if not clean_id or not is_valid_youtube_id(clean_id):
         raise HTTPException(status_code=400, detail="Invalid YouTube video ID format.")
 
-    # Deduplication lock to prevent concurrent double-clicks
-    lock_key = f"{user.id}:{clean_id}:notes"
+    user_id_str = str(user.id)
+    lock_key = f"{user_id_str}:{clean_id}:notes"
     if not _check_and_acquire_lock(lock_key):
         raise HTTPException(
             status_code=409,
@@ -216,29 +205,23 @@ def generate_notes_from_video(
         )
 
     try:
-        # Check for matching cached note created in last 30 minutes
         video_hash = generate_hash(f"video_{clean_id}")
         if not payload.force_refresh and not payload.custom_transcript:
-            existing_note = (
-                db.query(Notes)
-                .join(UserNotes)
-                .filter(
-                    UserNotes.user_id == user.id,
-                    Notes.source == "video",
-                    Notes.hash_key == video_hash
-                )
-                .first()
-            )
+            existing_note = notes_col.find_one({"source": "video", "hash_key": video_hash})
             if existing_note:
-                log.info("returning_cached_video_note", note_id=existing_note.id, video_id=clean_id)
+                note_id_str = str(existing_note.get("_id") or existing_note.get("id"))
+                link = user_notes_col.find_one({"user_id": user_id_str, "note_id": note_id_str})
+                if not link:
+                    user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
+
+                log.info("returning_cached_video_note", note_id=note_id_str, video_id=clean_id)
                 return {
                     "message": "Loaded existing notes generated for this video",
                     "note": note_to_dict(existing_note),
-                    "note_id": existing_note.id,
+                    "note_id": note_id_str,
                     "cached": True,
                 }
 
-        # Get video metadata for title and channel
         details = youtube_service.get_video_details(clean_id)
         video_title = payload.title or details.get("title") or f"YouTube Video {clean_id}"
 
@@ -255,8 +238,6 @@ def generate_notes_from_video(
             )
             content = generate_ai_notes(prompt_query, is_pdf=True)
         else:
-            # Step 1: Fast Path — Spoken Subtitles/Transcript (Hindi, English, Hinglish, etc.)
-            # Fetches in 1-2s and completes generation in 15-25s instead of multi-minute video stream transcoding
             transcript_status = youtube_service.get_video_transcript(clean_id)
             if transcript_status.get("available") and transcript_status.get("text"):
                 log.info("using_fast_spoken_transcript_for_notes", video_id=clean_id, chars=transcript_status.get("char_count"))
@@ -268,7 +249,6 @@ def generate_notes_from_video(
                 )
                 content = generate_ai_notes(prompt_query, is_pdf=True)
             else:
-                # Step 2: Direct Gemini Multimodal Video Understanding (when captions/subtitles are unavailable)
                 try:
                     log.info("captions_unavailable_attempting_direct_gemini_video_notes", video_id=clean_id)
                     content = generate_notes_from_youtube_direct(clean_id, video_title)
@@ -277,48 +257,50 @@ def generate_notes_from_video(
                     direct_error = str(exc)
                     log.warning("direct_gemini_video_notes_failed", video_id=clean_id, error=direct_error)
 
-                # Step 3: Graceful fallback to manual paste modal with detailed diagnostics
                 if not content:
                     detail_msg = _build_video_failure_detail(direct_error, transcript_status.get("message"))
                     raise HTTPException(status_code=422, detail=detail_msg)
 
         note_title = f"Notes: {video_title[:90]}"
 
-        # Upsert note by video_hash to respect unique constraint
-        existing_note = db.query(Notes).filter(Notes.hash_key == video_hash).first()
+        existing_note = notes_col.find_one({"hash_key": video_hash})
         if existing_note:
-            existing_note.title = note_title
-            existing_note.content = content
-            existing_note.created_at = datetime.utcnow().isoformat()
-            db.commit()
-            db.refresh(existing_note)
-            target_note = existing_note
-        else:
-            new_note = Notes(
-                title=note_title,
-                content=content,
-                hash_key=video_hash,
-                source="video",
-                created_at=datetime.utcnow().isoformat(),
+            note_id_str = str(existing_note.get("_id") or existing_note.get("id"))
+            notes_col.update_one(
+                {"_id": existing_note["_id"]},
+                {"$set": {
+                    "title": note_title,
+                    "content": content,
+                    "created_at": datetime.utcnow().isoformat(),
+                }}
             )
-            db.add(new_note)
-            db.commit()
-            db.refresh(new_note)
+            target_note = {**existing_note, "title": note_title, "content": content}
+        else:
+            new_note = {
+                "title": note_title,
+                "content": content,
+                "hash_key": video_hash,
+                "source": "video",
+                "created_at": datetime.utcnow().isoformat(),
+            }
+            inserted = notes_col.insert_one(new_note)
+            note_id_str = str(inserted.inserted_id)
+            notes_col.update_one({"_id": inserted.inserted_id}, {"$set": {"id": note_id_str}})
+            new_note["_id"] = inserted.inserted_id
+            new_note["id"] = note_id_str
             target_note = new_note
 
-        user_link = db.query(UserNotes).filter(UserNotes.user_id == user.id, UserNotes.note_id == target_note.id).first()
-        if not user_link:
-            db.add(UserNotes(user_id=user.id, note_id=target_note.id))
-            db.commit()
+        link = user_notes_col.find_one({"user_id": user_id_str, "note_id": note_id_str})
+        if not link:
+            user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
 
-        # Embed note chunks in background for document Q&A
-        background_tasks.add_task(embed_and_store_note_chunks, target_note.id, content)
+        background_tasks.add_task(embed_and_store_note_chunks, note_id_str, content)
 
-        log.info("video_notes_created", note_id=target_note.id, video_id=clean_id)
+        log.info("video_notes_created", note_id=note_id_str, video_id=clean_id)
         return {
             "message": "Notes generated successfully from video content",
             "note": note_to_dict(target_note),
-            "note_id": target_note.id
+            "note_id": note_id_str
         }
     finally:
         _release_lock(lock_key)
@@ -328,22 +310,15 @@ def generate_notes_from_video(
 def generate_quiz_from_video(
     video_id: str,
     payload: VideoQuizRequest,
-    db: Session = Depends(get_db),
+    db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    """
-    Generate interactive quiz questions grounded in the video's actual content.
-    Pipeline:
-      1. Direct Gemini multimodal video quiz generation.
-      2. Fallback to spoken transcript if direct analysis is unavailable.
-      3. Graceful fallback to manual paste modal with specific, actionable failure diagnostics.
-    """
     clean_id = extract_youtube_id(video_id)
     if not clean_id or not is_valid_youtube_id(clean_id):
         raise HTTPException(status_code=400, detail="Invalid YouTube video ID format.")
 
-    # Deduplication lock to prevent concurrent double-clicks
-    lock_key = f"{user.id}:{clean_id}:quiz"
+    user_id_str = str(user.id)
+    lock_key = f"{user_id_str}:{clean_id}:quiz"
     if not _check_and_acquire_lock(lock_key):
         raise HTTPException(
             status_code=409,
@@ -354,36 +329,40 @@ def generate_quiz_from_video(
         details = youtube_service.get_video_details(clean_id)
         video_title = details.get("title") or f"YouTube Video {clean_id}"
 
-        # Check for cached test matching difficulty and num_questions created in last 30 minutes
         if not payload.force_refresh and not payload.custom_transcript:
-            recent_test = (
-                db.query(Test)
-                .filter(
-                    Test.user_id == user.id,
-                    Test.difficulty == payload.difficulty,
-                    Test.topic == f"Quiz: {video_title[:80]}"
-                )
-                .order_by(Test.id.desc())
-                .first()
+            recent_test = tests_col.find_one(
+                {
+                    "user_id": user_id_str,
+                    "difficulty": payload.difficulty,
+                    "topic": f"Quiz: {video_title[:80]}"
+                },
+                sort=[("_id", -1)]
             )
-            if recent_test and len(recent_test.questions) == payload.num_questions:
-                try:
-                    created_dt = datetime.fromisoformat(recent_test.created_at)
-                    if (datetime.utcnow() - created_dt).total_seconds() < 1800:
-                        saved_questions = [
-                            QuestionOut(id=q.id, question=q.question_text, options=q.options)
-                            for q in recent_test.questions
-                        ]
-                        return {
-                            "message": "Loaded existing quiz generated for this video",
-                            "test_id": recent_test.id,
-                            "topic": recent_test.topic,
-                            "difficulty": recent_test.difficulty,
-                            "questions": saved_questions,
-                            "cached": True,
-                        }
-                except Exception:
-                    pass
+            if recent_test:
+                test_questions = recent_test.get("questions") or list(questions_col.find({"test_id": str(recent_test["_id"])}))
+                if len(test_questions) == payload.num_questions:
+                    try:
+                        created_dt = datetime.fromisoformat(recent_test.get("created_at", ""))
+                        if (datetime.utcnow() - created_dt).total_seconds() < 1800:
+                            saved_questions = [
+                                QuestionOut(
+                                    id=str(q.get("_id") or q.get("id")),
+                                    question=q.get("question_text", ""),
+                                    options=q.get("options") or []
+                                )
+                                for q in test_questions
+                            ]
+                            test_id_str = str(recent_test.get("_id") or recent_test.get("id"))
+                            return {
+                                "message": "Loaded existing quiz generated for this video",
+                                "test_id": test_id_str,
+                                "topic": recent_test.get("topic"),
+                                "difficulty": recent_test.get("difficulty"),
+                                "questions": saved_questions,
+                                "cached": True,
+                            }
+                    except Exception:
+                        pass
 
         questions_data = None
         direct_error = None
@@ -400,8 +379,6 @@ def generate_quiz_from_video(
                 difficulty=payload.difficulty
             )
         else:
-            # Step 1: Fast Path — Spoken Subtitles/Transcript (Hindi, English, Hinglish, etc.)
-            # Generates questions in 5-8s instead of multi-minute video stream transcoding
             transcript_status = youtube_service.get_video_transcript(clean_id)
             if transcript_status.get("available") and transcript_status.get("text"):
                 log.info("using_fast_spoken_transcript_for_quiz", video_id=clean_id, chars=transcript_status.get("char_count"))
@@ -416,7 +393,6 @@ def generate_quiz_from_video(
                     difficulty=payload.difficulty
                 )
             else:
-                # Step 2: Direct Gemini Multimodal Video Understanding (when captions are unavailable)
                 try:
                     log.info("captions_unavailable_attempting_direct_gemini_video_quiz", video_id=clean_id)
                     questions_data = generate_quiz_from_youtube_direct(
@@ -430,47 +406,53 @@ def generate_quiz_from_video(
                     direct_error = str(exc)
                     log.warning("direct_gemini_video_quiz_failed", video_id=clean_id, error=direct_error)
 
-                # Step 3: Graceful fallback to manual paste modal with detailed diagnostics
                 if not questions_data:
                     detail_msg = _build_video_failure_detail(direct_error, transcript_status.get("message"))
                     raise HTTPException(status_code=422, detail=detail_msg)
 
-        new_test = Test(
-            user_id=user.id,
-            topic=f"Quiz: {video_title[:80]}",
-            difficulty=payload.difficulty,
-            created_at=datetime.utcnow().isoformat()
-        )
-        db.add(new_test)
-        db.commit()
-        db.refresh(new_test)
+        new_test_doc = {
+            "user_id": user_id_str,
+            "topic": f"Quiz: {video_title[:80]}",
+            "difficulty": payload.difficulty,
+            "created_at": datetime.utcnow().isoformat(),
+            "questions": []
+        }
+        inserted_test = tests_col.insert_one(new_test_doc)
+        test_id_str = str(inserted_test.inserted_id)
+        tests_col.update_one({"_id": inserted_test.inserted_id}, {"$set": {"id": test_id_str}})
 
         saved_questions = []
+        embedded_questions = []
+
         for q in questions_data:
-            question = Question(
-                test_id=new_test.id,
-                question_text=q["question"],
-                options=q["options"],
-                correct_answer=q["correct_answer"]
-            )
-            db.add(question)
-            db.commit()
-            db.refresh(question)
+            q_doc = {
+                "test_id": test_id_str,
+                "question_text": q["question"],
+                "options": q["options"],
+                "correct_answer": q["correct_answer"],
+            }
+            inserted_q = questions_col.insert_one(q_doc)
+            q_id_str = str(inserted_q.inserted_id)
+            questions_col.update_one({"_id": inserted_q.inserted_id}, {"$set": {"id": q_id_str}})
+            q_doc["id"] = q_id_str
+            embedded_questions.append(q_doc)
 
             saved_questions.append(
                 QuestionOut(
-                    id=question.id,
-                    question=question.question_text,
-                    options=question.options
+                    id=q_id_str,
+                    question=q["question"],
+                    options=q["options"]
                 )
             )
 
-        log.info("video_quiz_created", test_id=new_test.id, video_id=clean_id, questions=len(saved_questions))
+        tests_col.update_one({"_id": inserted_test.inserted_id}, {"$set": {"questions": embedded_questions}})
+
+        log.info("video_quiz_created", test_id=test_id_str, video_id=clean_id, questions=len(saved_questions))
         return {
             "message": "Interactive quiz generated from video content",
-            "test_id": new_test.id,
-            "topic": new_test.topic,
-            "difficulty": new_test.difficulty,
+            "test_id": test_id_str,
+            "topic": new_test_doc["topic"],
+            "difficulty": new_test_doc["difficulty"],
             "questions": saved_questions
         }
     finally:
@@ -479,117 +461,132 @@ def generate_quiz_from_video(
 
 @router.post("/steps/{step_id}/videos/refresh")
 def refresh_step_videos(
-    step_id: int,
-    db: Session = Depends(get_db),
+    step_id: Union[int, str],
+    db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    """
-    Fetch or refresh video recommendations for an existing roadmap step.
-    Enables older roadmaps or search fallbacks to be upgraded with verified videos.
-    """
-    step = (
-        db.query(Step)
-        .join(Goal)
-        .filter(Step.id == step_id, Goal.user_id == user.id)
-        .first()
-    )
+    step = steps_col.find_one(id_filter(step_id))
+    goal = None
+    if step:
+        goal = goals_col.find_one(id_filter(step.get("goal_id")))
+    else:
+        goal = goals_col.find_one({"steps.id": str(step_id)})
+        if goal:
+            for s in goal.get("steps", []):
+                if str(s.get("id")) == str(step_id):
+                    step = s
+                    break
+
     if not step:
         raise HTTPException(status_code=404, detail="Step not found or access denied")
 
-    goal_title = step.goal.title if step.goal else ""
-    query = build_search_query(goal_title, step.description)
+    goal_title = goal.get("title", "") if goal else ""
+    query = build_search_query(goal_title, step.get("description", ""))
 
     videos = youtube_service.search_videos(query=query, max_results=1)
-    step.videos = videos
-    db.commit()
-    db.refresh(step)
 
-    return {"step_id": step.id, "videos": step.videos or []}
+    steps_col.update_one(id_filter(step_id), {"$set": {"videos": videos}})
+    if goal:
+        goals_col.update_one(
+            {"_id": goal["_id"], "steps.id": str(step_id)},
+            {"$set": {"steps.$.videos": videos}}
+        )
+
+    return {"step_id": str(step_id), "videos": videos}
 
 
 @router.post("/goals/{goal_id}/videos/refresh")
 def refresh_goal_videos(
-    goal_id: int,
-    db: Session = Depends(get_db),
+    goal_id: Union[int, str],
+    db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    """
-    Refresh all video recommendations for an entire goal workspace.
-    Queries YouTube for each task and updates the step records.
-    """
-    goal = db.query(Goal).filter(Goal.id == goal_id, Goal.user_id == user.id).first()
+    user_id_str = str(user.id)
+    flt = {"$and": [id_filter(goal_id), {"user_id": user_id_str}]}
+    goal = goals_col.find_one(flt)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found or access denied")
 
+    steps = goal.get("steps") or list(steps_col.find({"goal_id": str(goal.get("_id") or goal.get("id"))}))
     refreshed_steps = []
-    for step in goal.steps:
-        query = build_search_query(goal.title, step.description)
-        videos = youtube_service.search_videos(query=query, max_results=1)
-        step.videos = videos
-        refreshed_steps.append({"step_id": step.id, "videos": videos})
 
-    db.commit()
-    db.refresh(goal)
+    for step in steps:
+        s_id = str(step.get("_id") or step.get("id"))
+        query = build_search_query(goal.get("title", ""), step.get("description", ""))
+        videos = youtube_service.search_videos(query=query, max_results=1)
+        step["videos"] = videos
+        steps_col.update_one(id_filter(s_id), {"$set": {"videos": videos}})
+        refreshed_steps.append({"step_id": s_id, "videos": videos})
+
+    goals_col.update_one({"_id": goal["_id"]}, {"$set": {"steps": steps}})
 
     return {
         "message": f"Successfully refreshed resources for {len(refreshed_steps)} tasks",
-        "goal_id": goal.id,
+        "goal_id": str(goal_id),
         "refreshed": refreshed_steps,
     }
 
 
 @router.post("/steps/{step_id}/resources/refresh")
 def refresh_step_resources(
-    step_id: int,
-    db: Session = Depends(get_db),
+    step_id: Union[int, str],
+    db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    """
-    Re-resolve the optimal learning resource (documentation, interactive lab, repo, or video)
-    for a specific roadmap task.
-    """
-    step = (
-        db.query(Step)
-        .join(Goal)
-        .filter(Step.id == step_id, Goal.user_id == user.id)
-        .first()
-    )
+    step = steps_col.find_one(id_filter(step_id))
+    goal = None
+    if step:
+        goal = goals_col.find_one(id_filter(step.get("goal_id")))
+    else:
+        goal = goals_col.find_one({"steps.id": str(step_id)})
+        if goal:
+            for s in goal.get("steps", []):
+                if str(s.get("id")) == str(step_id):
+                    step = s
+                    break
+
     if not step:
         raise HTTPException(status_code=404, detail="Step not found or access denied")
 
-    goal_title = step.goal.title if step.goal else ""
-    resources = resolve_best_resources(goal_title, step.description)
-    step.videos = resources
-    db.commit()
-    db.refresh(step)
+    goal_title = goal.get("title", "") if goal else ""
+    resources = resolve_best_resources(goal_title, step.get("description", ""))
 
-    return {"step_id": step.id, "videos": step.videos or []}
+    steps_col.update_one(id_filter(step_id), {"$set": {"videos": resources}})
+    if goal:
+        goals_col.update_one(
+            {"_id": goal["_id"], "steps.id": str(step_id)},
+            {"$set": {"steps.$.videos": resources}}
+        )
+
+    return {"step_id": str(step_id), "videos": resources}
 
 
 @router.post("/goals/{goal_id}/resources/refresh")
 def refresh_goal_resources(
-    goal_id: int,
-    db: Session = Depends(get_db),
+    goal_id: Union[int, str],
+    db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    """
-    Re-resolve the optimal learning resources for all tasks in a goal workspace.
-    """
-    goal = db.query(Goal).filter(Goal.id == goal_id, Goal.user_id == user.id).first()
+    user_id_str = str(user.id)
+    flt = {"$and": [id_filter(goal_id), {"user_id": user_id_str}]}
+    goal = goals_col.find_one(flt)
     if not goal:
         raise HTTPException(status_code=404, detail="Goal not found or access denied")
 
+    steps = goal.get("steps") or list(steps_col.find({"goal_id": str(goal.get("_id") or goal.get("id"))}))
     refreshed_steps = []
-    for step in goal.steps:
-        resources = resolve_best_resources(goal.title, step.description)
-        step.videos = resources
-        refreshed_steps.append({"step_id": step.id, "videos": resources})
 
-    db.commit()
-    db.refresh(goal)
+    for step in steps:
+        s_id = str(step.get("_id") or step.get("id"))
+        resources = resolve_best_resources(goal.get("title", ""), step.get("description", ""))
+        step["videos"] = resources
+        steps_col.update_one(id_filter(s_id), {"$set": {"videos": resources}})
+        refreshed_steps.append({"step_id": s_id, "videos": resources})
+
+    goals_col.update_one({"_id": goal["_id"]}, {"$set": {"steps": steps}})
 
     return {
         "message": f"Successfully resolved optimal resources for {len(refreshed_steps)} tasks",
-        "goal_id": goal.id,
+        "goal_id": str(goal_id),
         "refreshed": refreshed_steps,
     }

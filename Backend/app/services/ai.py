@@ -7,8 +7,7 @@ from dotenv import load_dotenv
 import time
 import datetime
 from threading import Lock
-from app.database import SessionLocal
-from app.models.ai_log import AILog
+from app.database import ai_logs_col
 from app.core.logging_config import get_logger
 from app.core.metrics import LLM_LATENCY, LLM_CALLS, LLM_TOKENS
 from app.core.tracing import get_tracer
@@ -287,26 +286,21 @@ def ai(
     )
 
     # ── Log to database ─────────────────────────────────────────────────────
-    db = SessionLocal()
     log_id = None
     try:
-        log_record = AILog(
-            endpoint=f"{endpoint_name}_{used_model}",
-            prompt=json.dumps(prompt, indent=2),
-            response=content,
-            latency=latency,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-        )
-        db.add(log_record)
-        db.commit()
-        db.refresh(log_record)
-        log_id = log_record.id
+        inserted = ai_logs_col.insert_one({
+            "endpoint": f"{endpoint_name}_{used_model}",
+            "prompt": json.dumps(prompt, indent=2),
+            "response": content,
+            "latency": latency,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "created_at": datetime.datetime.utcnow(),
+        })
+        log_id = str(inserted.inserted_id)
     except Exception as db_err:
         log.error("ai_log_db_write_failed", error=str(db_err))
-    finally:
-        db.close()
 
     # ── Background evaluation ───────────────────────────────────────────────
     if log_id and background_tasks and evaluation_context:
@@ -787,23 +781,19 @@ def generate_video_content_with_gemini(
 
     # Log to AILog
     total_tokens = prompt_tokens + completion_tokens
-    db = SessionLocal()
     try:
-        log_record = AILog(
-            endpoint=f"{endpoint_name}_{used_model}",
-            prompt=f"Video URL: {youtube_url}\nPrompt: {prompt}",
-            response=response_text[:4000],
-            latency=latency,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            total_tokens=total_tokens,
-        )
-        db.add(log_record)
-        db.commit()
+        ai_logs_col.insert_one({
+            "endpoint": f"{endpoint_name}_{used_model}",
+            "prompt": f"Video URL: {youtube_url}\nPrompt: {prompt}",
+            "response": response_text[:4000],
+            "latency": latency,
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+            "created_at": datetime.datetime.utcnow(),
+        })
     except Exception as db_err:
         log.error("ai_log_db_write_failed", error=str(db_err))
-    finally:
-        db.close()
 
     return response_text
 
@@ -940,4 +930,4 @@ def generate_quiz_from_youtube_direct(
             "explanation": explanation,
         })
 
-    return processed
+    return processed

@@ -1,4 +1,6 @@
 from pydantic import BaseModel
+from typing import Union, Optional
+
 
 class RoadMapCreate(BaseModel):
     title: str
@@ -6,8 +8,9 @@ class RoadMapCreate(BaseModel):
     duration_days: int
     content: str
 
+
 class RoadMapResponse(BaseModel):
-    id: int
+    id: Union[int, str]
     title: str
     description: str
     duration_days: int
@@ -15,4 +18,3 @@ class RoadMapResponse(BaseModel):
 
     class Config:
         from_attributes = True
-

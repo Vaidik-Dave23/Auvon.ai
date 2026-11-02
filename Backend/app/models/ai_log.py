@@ -1,23 +1,39 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Text
-from app.database import Base
 from datetime import datetime
+from typing import Optional
 
-class AILog(Base):
-    __tablename__ = 'ai_logs'
 
-    id = Column(Integer, primary_key=True)
-    endpoint = Column(String, nullable=False)
-    prompt = Column(Text, nullable=False)
-    response = Column(Text, nullable=False)
-    latency = Column(Float, nullable=False)  # In seconds
-    prompt_tokens = Column(Integer, nullable=False)
-    completion_tokens = Column(Integer, nullable=False)
-    total_tokens = Column(Integer, nullable=False)
-    
-    # Evaluation scores (Ragas metrics)
-    faithfulness = Column(Float, nullable=True)
-    relevance = Column(Float, nullable=True)
-  
-    evaluation_feedback = Column(Text, nullable=True)
-    
-    created_at = Column(DateTime, default=datetime.utcnow)
+class AILog:
+    def __init__(self, **kwargs):
+        self._id = kwargs.get("_id")
+        self.id = str(kwargs.get("id") or self._id or "")
+        self.endpoint = kwargs.get("endpoint", "")
+        self.prompt = kwargs.get("prompt", "")
+        self.response = kwargs.get("response", "")
+        self.latency = float(kwargs.get("latency", 0.0))
+        self.prompt_tokens = int(kwargs.get("prompt_tokens", 0))
+        self.completion_tokens = int(kwargs.get("completion_tokens", 0))
+        self.total_tokens = int(kwargs.get("total_tokens", 0))
+        self.faithfulness = kwargs.get("faithfulness")
+        self.relevance = kwargs.get("relevance")
+        self.evaluation_feedback = kwargs.get("evaluation_feedback")
+        self.created_at = kwargs.get("created_at") or datetime.utcnow()
+
+    def to_dict(self):
+        d = {
+            "endpoint": self.endpoint,
+            "prompt": self.prompt,
+            "response": self.response,
+            "latency": self.latency,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "faithfulness": self.faithfulness,
+            "relevance": self.relevance,
+            "evaluation_feedback": self.evaluation_feedback,
+            "created_at": self.created_at,
+        }
+        if self._id:
+            d["_id"] = self._id
+        if self.id:
+            d["id"] = self.id
+        return d

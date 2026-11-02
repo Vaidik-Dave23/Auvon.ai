@@ -1,33 +1,150 @@
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-from dotenv import load_dotenv
 import os
+from dotenv import load_dotenv
+from app.core.logging_config import get_logger
+
+log = get_logger(__name__)
 
 load_dotenv()
-DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is not set in .env file")
 
-engine = create_engine(
-    DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=1800,
-)
+MONGODB_URI = os.getenv("MONGODB_URI") or os.getenv("DATABASE_URL")
+MONGODB_DATABASE = os.getenv("MONGODB_DATABASE", "auvon")
 
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+try:
+    from pymongo import MongoClient
+    from bson import ObjectId
+    _has_pymongo = True
+except ImportError:
+    MongoClient = None
+    _has_pymongo = False
 
-Base = declarative_base()
+    class ObjectId:
+        def __init__(self, val=None):
+            self.val = str(val) if val else ""
+        def __str__(self):
+            return self.val
+        def __repr__(self):
+            return f"ObjectId('{self.val}')"
+        def __eq__(self, other):
+            return str(self) == str(other)
+
+if _has_pymongo and MONGODB_URI:
+    try:
+        client = MongoClient(
+            MONGODB_URI,
+            serverSelectionTimeoutMS=5000,
+            connectTimeoutMS=5000,
+        )
+        db = client[MONGODB_DATABASE]
+    except Exception as e:
+        log.error("mongo_connection_initialization_failed", error=str(e))
+        db = None
+else:
+    # Dummy collection fallback if pymongo is not yet installed in local dev
+    class MockCollection:
+        def find(self, *args, **kwargs): return []
+        def find_one(self, *args, **kwargs): return None
+        def insert_one(self, doc, *args, **kwargs):
+            class Res: inserted_id = "mock_id"
+            return Res()
+        def insert_many(self, docs, *args, **kwargs): pass
+        def update_one(self, *args, **kwargs): pass
+        def update_many(self, *args, **kwargs): pass
+        def delete_one(self, *args, **kwargs): pass
+        def delete_many(self, *args, **kwargs): pass
+        def create_index(self, *args, **kwargs): pass
+
+    class MockDB:
+        def __getitem__(self, name): return MockCollection()
+
+    db = MockDB()
+
+# Primary collections
+users_col = db["users"]
+notes_col = db["notes"]
+user_notes_col = db["user_notes"]
+tasks_col = db["tasks"]
+goals_col = db["goals"]
+steps_col = db["steps"]
+progress_col = db["progress"]
+tests_col = db["tests"]
+questions_col = db["questions"]
+test_results_col = db["test_results"]
+user_answers_col = db["user_answers"]
+ai_logs_col = db["ai_logs"]
+document_chunks_col = db["document_chunks"]
+
+
+def init_db():
+    """Ensure essential indexes exist for performance and uniqueness."""
+    try:
+        users_col.create_index("email", unique=True)
+        users_col.create_index("id", sparse=True)
+        tasks_col.create_index("user_id")
+        goals_col.create_index("user_id")
+        steps_col.create_index("goal_id")
+        notes_col.create_index("hash_key", sparse=True)
+        user_notes_col.create_index([("user_id", 1), ("note_id", 1)])
+        tests_col.create_index("user_id")
+        questions_col.create_index("test_id")
+        test_results_col.create_index([("user_id", 1), ("test_id", 1)])
+        user_answers_col.create_index([("user_id", 1), ("test_id", 1)])
+        document_chunks_col.create_index("note_id")
+        log.info("mongo_indexes_initialized")
+    except Exception as e:
+        log.warning("mongo_index_init_warning", error=str(e))
 
 
 def get_db():
-    db = SessionLocal()
+    """FastAPI dependency yielding the MongoDB database instance."""
+    return db
+
+
+def to_object_id(val):
+    """Safely converts string or ObjectId to ObjectId."""
+    if not val:
+        return None
+    if isinstance(val, ObjectId):
+        return val
     try:
-        yield db
-    finally:
-        db.close()
+        val_str = str(val).strip()
+        if len(val_str) == 24 and all(c in "0123456789abcdefABCDEF" for c in val_str):
+            return ObjectId(val_str)
+    except Exception:
+        pass
+    return None
+
+
+def id_filter(val):
+    """Returns a MongoDB filter that matches either _id (as ObjectId) or id (string/int)."""
+    conditions = [{"id": val}, {"id": str(val)}]
+    try:
+        conditions.append({"id": int(val)})
+    except (ValueError, TypeError):
+        pass
+    obj_id = to_object_id(val)
+    if obj_id:
+        conditions.append({"_id": obj_id})
+    return {"$or": conditions}
+
+
+def serialize_doc(doc):
+    """Converts a MongoDB document to JSON-safe dict, ensuring an 'id' string field."""
+    if not doc:
+        return None
+    d = dict(doc)
+    if "_id" in d:
+        doc_id = str(d["_id"])
+        if "id" not in d or d["id"] is None:
+            d["id"] = doc_id
+        d["_id"] = doc_id
+    return d
+
+
+def serialize_docs(docs):
+    return [serialize_doc(d) for d in docs]
+
+
+# Compatibility stubs for legacy imports
+Base = None
+engine = None
+SessionLocal = get_db

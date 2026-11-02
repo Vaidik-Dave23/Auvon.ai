@@ -47,45 +47,47 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen grid grid-cols-1 md:grid-cols-2 bg-page">
-      {/* LEFT: Form Side */}
-      <div className="flex items-center justify-center bg-surface p-8 md:p-16">
-        <div className="w-full max-w-[380px] flex flex-col gap-8">
-          <div>
-            <h1 className="font-serif text-3xl font-semibold text-text-primary mb-12">
-              Auvon
-            </h1>
-            <p className="text-xs font-semibold tracking-wider text-text-tertiary uppercase mb-2">
-              Welcome back
-            </p>
-            <h2 className="font-serif text-3xl font-medium text-text-primary">
-              Sign in to continue
-            </h2>
-          </div>
+    <div className="min-h-screen bg-[var(--bg-canvas-gradient)] text-[var(--text-primary)] relative flex flex-col justify-center items-center p-4 md:p-8 transition-colors duration-250 font-sans">
+      <div className="w-full max-w-[1020px] grid grid-cols-1 md:grid-cols-12 auvon-card !p-0 overflow-hidden shadow-2xl">
+        {/* LEFT: Form Side */}
+        <div className="md:col-span-7 p-8 md:p-14 flex flex-col justify-center bg-[var(--bg-surface)]">
+          <div className="max-w-[380px] w-full mx-auto flex flex-col gap-6">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-xl font-bold tracking-tight text-[var(--text-primary)] font-heading">
+                  Auvon <span className="text-[var(--accent-primary)] font-semibold">ai</span>
+                </span>
+              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] font-heading">
+                Sign in to Auvon ai
+              </h1>
+              <p className="text-sm text-[var(--text-secondary)] mt-1">
+                Enter your credentials to resume your learning roadmap.
+              </p>
+            </div>
 
-          <form onSubmit={handleLogin} className="flex flex-col gap-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-text-secondary">
-                  Email address
+            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                  Email Address
                 </label>
                 <input
                   type="email"
-                  placeholder="you@school.edu"
+                  placeholder="name@university.edu"
                   value={email}
                   onChange={(e) => {
                     setEmail(e.target.value);
                     if (emailError) setEmailError(false);
                   }}
-                  className={`w-full bg-input border ${
-                    emailError ? "border-danger" : "border-border"
-                  } text-text-primary placeholder:text-text-tertiary/60 px-4 py-3 rounded-lg focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-sans`}
+                  className={`w-full bg-[var(--bg-surface-subtle)] border ${
+                    emailError ? "border-red-400" : "border-[var(--border-subtle)]"
+                  } text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-4 py-3 rounded-xl focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all font-sans text-sm`}
                   required
                 />
               </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-medium text-text-secondary">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
                   Password
                 </label>
                 <input
@@ -96,77 +98,73 @@ function Login() {
                     setPassword(e.target.value);
                     if (passwordError) setPasswordError(false);
                   }}
-                  className={`w-full bg-input border ${
-                    passwordError ? "border-danger" : "border-border"
-                  } text-text-primary placeholder:text-text-tertiary/60 px-4 py-3 rounded-lg focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all font-sans`}
+                  className={`w-full bg-[var(--bg-surface-subtle)] border ${
+                    passwordError ? "border-red-400" : "border-[var(--border-subtle)]"
+                  } text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-4 py-3 rounded-xl focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all font-sans text-sm`}
                   required
                 />
               </div>
+
+              {error && (
+                <p className="text-xs text-red-500 font-mono mt-1">
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="auvon-pill-btn-primary w-full py-3.5 text-sm font-semibold flex items-center justify-center gap-2 mt-2 cursor-pointer disabled:opacity-50"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    <span>Signing In...</span>
+                  </>
+                ) : (
+                  <span>Continue to Workspace →</span>
+                )}
+              </button>
+            </form>
+
+            <div className="flex items-center gap-3">
+              <div className="flex-1 h-px bg-[var(--border-subtle)]" />
+              <span className="text-[11px] font-mono text-[var(--text-muted)] uppercase tracking-wider">
+                or continue with
+              </span>
+              <div className="flex-1 h-px bg-[var(--border-subtle)]" />
             </div>
 
-            {error && (
-              <p className="text-sm text-danger font-medium animate-fade-in">
-                {error}
-              </p>
-            )}
+            <GoogleAuthButton
+              mode="signin"
+              onError={(msg) => setError(msg)}
+              loading={loading}
+            />
 
-            <button
-              type="submit"
-              disabled={loading}
-              className={`w-full bg-accent text-accent-text py-3 rounded-lg font-sans font-semibold hover:opacity-90 transition-all flex items-center justify-center gap-2 ${
-                loading ? "opacity-70 cursor-not-allowed" : ""
-              }`}
-            >
-              {loading ? (
-                <>
-                  <svg className="animate-spin h-5 w-5 text-accent-text" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Signing in...
-                </>
-              ) : (
-                "Sign in"
-              )}
-            </button>
-          </form>
-
-          <div className="relative flex py-1 items-center">
-            <div className="flex-grow border-t border-border-subtle"></div>
-            <span className="flex-shrink mx-4 text-xs uppercase tracking-wider text-text-tertiary font-medium">
-              Or continue with
-            </span>
-            <div className="flex-grow border-t border-border-subtle"></div>
-          </div>
-
-          <GoogleAuthButton
-            mode="signin"
-            onError={(msg) => setError(msg)}
-            loading={loading}
-          />
-
-          <div className="text-sm text-text-secondary mt-2">
-            No account yet?{" "}
-            <button
-              onClick={() => navigate("/register")}
-              className="text-accent font-medium hover:underline focus:outline-none"
-            >
-              Create one
-            </button>
+            <div className="text-xs text-[var(--text-secondary)] text-center mt-2">
+              No account yet?{" "}
+              <button
+                type="button"
+                onClick={() => navigate("/register")}
+                className="text-[var(--accent-primary)] font-semibold hover:underline focus:outline-none cursor-pointer"
+              >
+                Create an account
+              </button>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* RIGHT: Editorial Side */}
-      <div className="hidden md:flex flex-col justify-center items-center bg-page p-16 border-l border-border-subtle">
-        <div className="max-w-[460px] flex flex-col gap-6 text-left">
-          <blockquote className="font-serif text-3xl md:text-4xl text-text-primary leading-normal italic">
-            "{authQuote.text}"
-          </blockquote>
-          <hr className="border-border-subtle w-16" />
-          <p className="text-text-tertiary text-sm font-sans tracking-wide">
-            {authQuote.attribution}
-          </p>
+        {/* RIGHT: Editorial Sanctuary Side */}
+        <div className="hidden md:flex md:col-span-5 flex-col justify-center p-12 bg-[var(--bg-surface-subtle)] border-l border-[var(--border-subtle)]">
+          <div className="flex flex-col gap-6">
+            <blockquote className="font-serif italic text-2xl lg:text-3xl text-[var(--text-primary)] leading-relaxed">
+              "{authQuote.text}"
+            </blockquote>
+            <div className="w-12 h-0.5 bg-[var(--accent-primary)]" />
+            <p className="text-xs font-mono text-[var(--text-secondary)] tracking-wide">
+              {authQuote.attribution}
+            </p>
+          </div>
         </div>
       </div>
     </div>

@@ -1,6 +1,14 @@
 from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request
-from sqlalchemy.orm import Session
-from app.database import get_db
+from typing import Union
+from app.database import (
+    get_db,
+    notes_col,
+    user_notes_col,
+    document_chunks_col,
+    id_filter,
+    to_object_id,
+    serialize_doc,
+)
 from app.core.limiter import limiter
 from app.core.cache import redis_client
 import json
@@ -13,7 +21,6 @@ from app.utils.embeddings import get_embedding, get_query_embedding
 from datetime import datetime
 import fitz
 import math
-from app.models.chunk import DocumentChunk
 from app.core.logging_config import get_logger
 from app.core.tracing import get_tracer
 
@@ -21,12 +28,8 @@ log = get_logger(__name__)
 tracer = get_tracer(__name__)
 
 
-# ── Chunking (imported from utils) ──────────────────────────────────────────
+# ── Chunking ───────────────────────────────────────────────────────────────
 def chunk_text(text: str, max_chunk_size: int = 1000, overlap: int = 200) -> list[str]:
-    """
-    Delegate to the improved semantic chunker.
-    Kept here so existing imports don't break.
-    """
     import re
 
     def _split_sentences(t):
@@ -99,7 +102,6 @@ def chunk_text(text: str, max_chunk_size: int = 1000, overlap: int = 200) -> lis
 
 
 # ── Similarity ───────────────────────────────────────────────────────────────
-
 def cosine_similarity(v1: list[float], v2: list[float]) -> float:
     dot = sum(a * b for a, b in zip(v1, v2))
     norm1 = math.sqrt(sum(a * a for a in v1))
@@ -110,17 +112,14 @@ def cosine_similarity(v1: list[float], v2: list[float]) -> float:
 
 
 # ── Background embedding task ─────────────────────────────────────────────────
-
 from concurrent.futures import ThreadPoolExecutor
 
-def embed_and_store_note_chunks(note_id: int, text: str):
-    """Chunk text and store embeddings in parallel. Re-embeds if content changes or cleans up stale chunks."""
-    from app.database import SessionLocal
-    db = SessionLocal()
+
+def embed_and_store_note_chunks(note_id: Union[int, str], text: str):
+    """Chunk text and store embeddings in MongoDB. Re-embeds if content changes."""
+    note_id_str = str(note_id)
     try:
-        # Delete any existing chunks for this note to prevent stale or mismatched content
-        db.query(DocumentChunk).filter(DocumentChunk.note_id == note_id).delete()
-        db.commit()
+        document_chunks_col.delete_many({"note_id": note_id_str})
 
         chunks = [c for c in chunk_text(text, max_chunk_size=1000, overlap=200) if c.strip()]
 
@@ -128,142 +127,123 @@ def embed_and_store_note_chunks(note_id: int, text: str):
             try:
                 return c, get_embedding(c)
             except Exception as e:
-                log.warning("chunk_embedding_failed", note_id=note_id, error=str(e))
+                log.warning("chunk_embedding_failed", note_id=note_id_str, error=str(e))
                 return c, None
 
         with ThreadPoolExecutor(max_workers=8) as pool:
             results = list(pool.map(_embed_safe, chunks))
 
-        stored = 0
+        docs_to_insert = []
         for chunk_txt, embedding in results:
             if embedding is not None:
-                db.add(DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=embedding, embedding_vec=embedding))
-                stored += 1
+                docs_to_insert.append({
+                    "note_id": note_id_str,
+                    "chunk_text": chunk_txt,
+                    "embedding": embedding,
+                    "created_at": datetime.utcnow()
+                })
 
-        db.commit()
-        log.info("note_chunks_stored", note_id=note_id, chunks_stored=stored, chunks_total=len(chunks))
+        if docs_to_insert:
+            document_chunks_col.insert_many(docs_to_insert)
+
+        log.info("note_chunks_stored", note_id=note_id_str, chunks_stored=len(docs_to_insert), chunks_total=len(chunks))
     except Exception as e:
-        log.error("embed_and_store_note_chunks_failed", note_id=note_id, error=str(e))
-    finally:
-        db.close()
+        log.error("embed_and_store_note_chunks_failed", note_id=note_id_str, error=str(e))
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
 def note_to_dict(note):
+    if not note:
+        return {}
+    if isinstance(note, dict):
+        nid = str(note.get("_id") or note.get("id"))
+        return {
+            "id": nid,
+            "title": note.get("title", ""),
+            "content": note.get("content", ""),
+            "source": note.get("source", "keyword"),
+            "hash_key": note.get("hash_key", ""),
+            "created_at": note.get("created_at"),
+        }
     return {
-        "id": note.id,
-        "title": note.title,
-        "content": note.content,
-        "source": note.source,
-        "hash_key": note.hash_key,
-        "created_at": note.created_at,
+        "id": str(getattr(note, "id", "")),
+        "title": getattr(note, "title", ""),
+        "content": getattr(note, "content", ""),
+        "source": getattr(note, "source", "keyword"),
+        "hash_key": getattr(note, "hash_key", ""),
+        "created_at": getattr(note, "created_at", None),
     }
 
 
 # ── Router ───────────────────────────────────────────────────────────────────
-
 router = APIRouter(prefix="/notes", tags=["notes"])
 
 
 @router.get("/search")
 def search_notes(
     q: str,
-    db: Session = Depends(get_db),
-    user=Depends(get_verified_user)
+    db = Depends(get_db),
+    user = Depends(get_verified_user)
 ):
     if not q or not q.strip():
         return []
 
+    user_id_str = str(user.id)
     matched_notes = []
 
-    # 1. Try basic title search first (fast, precise, free)
+    # 1. Title search via regex
     try:
-        matched_notes = (
-            db.query(Notes)
-            .join(UserNotes, UserNotes.note_id == Notes.id)
-            .filter(UserNotes.user_id == user.id)
-            .filter(Notes.title.ilike(f"%{q}%"))
-            .all()
-        )
+        user_notes_links = list(user_notes_col.find({"user_id": user_id_str}))
+        my_note_ids = {str(un.get("note_id")) for un in user_notes_links}
+
+        found_notes = list(notes_col.find({
+            "title": {"$regex": q, "$options": "i"}
+        }))
+
+        for n in found_notes:
+            n_id = str(n.get("_id") or n.get("id"))
+            if n_id in my_note_ids:
+                matched_notes.append(n)
     except Exception as e:
         log.warning("title_search_failed", query=q, error=str(e))
 
-    # 2. Try pgvector semantic query first (fast, indexed)
+    # 2. In-memory semantic vector scan over document chunks
     if not matched_notes:
         try:
             query_emb = get_query_embedding(q)
-            # Retrieve the closest chunks across the user's notes
-            # pgvector cosine_distance = 1 - cosine_similarity. So similarity >= 0.70 means distance <= 0.30
-            raw_chunks = (
-                db.query(DocumentChunk)
-                .join(Notes, Notes.id == DocumentChunk.note_id)
-                .join(UserNotes, UserNotes.note_id == Notes.id)
-                .filter(UserNotes.user_id == user.id)
-                .filter(DocumentChunk.embedding_vec.cosine_distance(query_emb) <= 0.30)
-                .order_by(DocumentChunk.embedding_vec.cosine_distance(query_emb))
-                .limit(20)
-                .all()
-            )
-            if raw_chunks:
-                # Deduplicate notes and build matched list
-                seen_note_ids = set()
-                for c in raw_chunks:
-                    if c.note_id not in seen_note_ids:
-                        seen_note_ids.add(c.note_id)
-                        # Fetch the note itself
-                        note_obj = db.query(Notes).filter(Notes.id == c.note_id).first()
-                        if note_obj:
-                            matched_notes.append(note_obj)
-        except Exception as e:
-            log.warning("pgvector_search_failed_falling_back_to_json_scan", error=str(e))
-            # Fallback to current memory-scan path
-            try:
-                query_emb = get_query_embedding(q)
-                chunks = (
-                    db.query(DocumentChunk)
-                    .join(Notes, Notes.id == DocumentChunk.note_id)
-                    .join(UserNotes, UserNotes.note_id == Notes.id)
-                    .filter(UserNotes.user_id == user.id)
-                    .all()
-                )
-                
-                if chunks:
-                    note_scores = {}
-                    for chunk in chunks:
-                        emb = chunk.embedding_vec if chunk.embedding_vec is not None else chunk.embedding
-                        sim = cosine_similarity(query_emb, emb)
-                        if chunk.note_id not in note_scores or sim > note_scores[chunk.note_id]:
-                            note_scores[chunk.note_id] = sim
-                    
-                    # Sort note_ids by similarity score descending
-                    sorted_notes = sorted(note_scores.items(), key=lambda x: x[1], reverse=True)
-                    
-                    # Take notes with similarity >= 0.70 (calibrated for gemini-embedding-001 narrow-cone baseline)
-                    SIMILARITY_THRESHOLD = 0.70
-                    matched_note_ids = [note_id for note_id, score in sorted_notes if score >= SIMILARITY_THRESHOLD]
-                    
-                    if matched_note_ids:
-                        # Fetch notes from DB maintaining the rank order
-                        notes_dict = {n.id: n for n in db.query(Notes).filter(Notes.id.in_(matched_note_ids)).all()}
-                        matched_notes = [notes_dict[nid] for nid in matched_note_ids if nid in notes_dict]
-            except Exception as inner_e:
-                log.warning("semantic_search_failed", query=q, error=str(inner_e))
+            user_notes_links = list(user_notes_col.find({"user_id": user_id_str}))
+            my_note_ids = [str(un.get("note_id")) for un in user_notes_links]
 
-    # 3. Associate matched notes with the user so they don't get 403 on view/query
+            chunks = list(document_chunks_col.find({"note_id": {"$in": my_note_ids}}))
+
+            if chunks:
+                note_scores = {}
+                for chunk in chunks:
+                    emb = chunk.get("embedding")
+                    if emb:
+                        sim = cosine_similarity(query_emb, emb)
+                        nid = chunk["note_id"]
+                        if nid not in note_scores or sim > note_scores[nid]:
+                            note_scores[nid] = sim
+
+                sorted_notes = sorted(note_scores.items(), key=lambda x: x[1], reverse=True)
+                SIMILARITY_THRESHOLD = 0.70
+                matched_note_ids = [nid for nid, score in sorted_notes if score >= SIMILARITY_THRESHOLD]
+
+                for nid in matched_note_ids:
+                    n_doc = notes_col.find_one(id_filter(nid))
+                    if n_doc:
+                        matched_notes.append(n_doc)
+        except Exception as inner_e:
+            log.warning("semantic_search_failed", query=q, error=str(inner_e))
+
+    # 3. Ensure user association
     if matched_notes:
-        # Check existing associations
-        note_ids = [n.id for n in matched_notes]
-        existing_links = db.query(UserNotes).filter(
-            UserNotes.user_id == user.id,
-            UserNotes.note_id.in_(note_ids)
-        ).all()
-        linked_note_ids = {link.note_id for link in existing_links}
-        
         for note in matched_notes:
-            if note.id not in linked_note_ids:
-                db.add(UserNotes(user_id=user.id, note_id=note.id))
-        db.commit()
+            n_id = str(note.get("_id") or note.get("id"))
+            link = user_notes_col.find_one({"user_id": user_id_str, "note_id": n_id})
+            if not link:
+                user_notes_col.insert_one({"user_id": user_id_str, "note_id": n_id})
 
     return [note_to_dict(n) for n in matched_notes]
 
@@ -274,40 +254,51 @@ def generate_notes(
     request: Request,
     query: str,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    user=Depends(get_verified_user),
+    db = Depends(get_db),
+    user = Depends(get_verified_user),
 ):
     hash_key = generate_hash(query)
-    existing_note = db.query(Notes).filter(Notes.hash_key == hash_key).first()
+    user_id_str = str(user.id)
 
+    existing_note = notes_col.find_one({"hash_key": hash_key})
     if existing_note:
-        db.add(UserNotes(user_id=user.id, note_id=existing_note.id))
-        db.commit()
+        note_id_str = str(existing_note.get("_id") or existing_note.get("id"))
+        link = user_notes_col.find_one({"user_id": user_id_str, "note_id": note_id_str})
+        if not link:
+            user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
         return {"source": "cache", "note": note_to_dict(existing_note)}
 
     content = generate_ai_notes(query, is_pdf=False)
-    new_note = Notes(
-        title=query,
-        content=content,
-        hash_key=hash_key,
-        source="keyword",
-        created_at=datetime.utcnow().isoformat(),
-    )
-    db.add(new_note)
-    db.commit()
-    db.refresh(new_note)
-    db.add(UserNotes(user_id=user.id, note_id=new_note.id))
-    db.commit()
+    new_note = {
+        "title": query,
+        "content": content,
+        "hash_key": hash_key,
+        "source": "keyword",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    inserted = notes_col.insert_one(new_note)
+    note_id_str = str(inserted.inserted_id)
+    notes_col.update_one({"_id": inserted.inserted_id}, {"$set": {"id": note_id_str}})
+    new_note["_id"] = inserted.inserted_id
+    new_note["id"] = note_id_str
 
-    background_tasks.add_task(embed_and_store_note_chunks, new_note.id, content)
+    user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
+
+    background_tasks.add_task(embed_and_store_note_chunks, note_id_str, content)
     return {"source": "ai", "note": note_to_dict(new_note)}
 
 
 @router.get("/my")
-def get_my_notes(db: Session = Depends(get_db), user=Depends(get_verified_user)):
-    user_notes = db.query(UserNotes).filter(UserNotes.user_id == user.id).all()
-    note_ids = [un.note_id for un in user_notes]
-    return db.query(Notes).filter(Notes.id.in_(note_ids)).order_by(Notes.created_at.desc()).all()
+def get_my_notes(db = Depends(get_db), user = Depends(get_verified_user)):
+    user_id_str = str(user.id)
+    user_notes = list(user_notes_col.find({"user_id": user_id_str}))
+    note_ids = [str(un.get("note_id")) for un in user_notes]
+
+    obj_ids = [to_object_id(nid) for nid in note_ids if to_object_id(nid)]
+    query = {"$or": [{"_id": {"$in": obj_ids}}, {"id": {"$in": note_ids}}]} if note_ids else {"_id": None}
+
+    notes = list(notes_col.find(query).sort("_id", -1))
+    return [note_to_dict(n) for n in notes]
 
 
 @router.post("/pdf")
@@ -316,39 +307,42 @@ async def generate_from_pdf(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db),
-    user=Depends(get_verified_user),
+    db = Depends(get_db),
+    user = Depends(get_verified_user),
 ):
     content_bytes = await file.read()
     hash_key = generate_hash(content_bytes.decode(errors="ignore")[:1000])
+    user_id_str = str(user.id)
 
-    existing_note = db.query(Notes).filter(Notes.hash_key == hash_key).first()
+    existing_note = notes_col.find_one({"hash_key": hash_key})
     if existing_note:
-        db.add(UserNotes(user_id=user.id, note_id=existing_note.id))
-        db.commit()
+        note_id_str = str(existing_note.get("_id") or existing_note.get("id"))
+        link = user_notes_col.find_one({"user_id": user_id_str, "note_id": note_id_str})
+        if not link:
+            user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
         return {"source": "cache", "note": note_to_dict(existing_note)}
 
     pdf = fitz.open(stream=content_bytes, filetype="pdf")
     full_text = "".join(page.get_text() for page in pdf)
 
-    # Use first 12k chars for note summary (more than before)
     summary = generate_ai_notes(full_text[:12000], is_pdf=True)
 
-    new_note = Notes(
-        title=file.filename,
-        content=summary,
-        hash_key=hash_key,
-        source="pdf",
-        created_at=datetime.utcnow().isoformat(),
-    )
-    db.add(new_note)
-    db.commit()
-    db.refresh(new_note)
-    db.add(UserNotes(user_id=user.id, note_id=new_note.id))
-    db.commit()
+    new_note = {
+        "title": file.filename,
+        "content": summary,
+        "hash_key": hash_key,
+        "source": "pdf",
+        "created_at": datetime.utcnow().isoformat(),
+    }
+    inserted = notes_col.insert_one(new_note)
+    note_id_str = str(inserted.inserted_id)
+    notes_col.update_one({"_id": inserted.inserted_id}, {"$set": {"id": note_id_str}})
+    new_note["_id"] = inserted.inserted_id
+    new_note["id"] = note_id_str
 
-    # Embed the FULL PDF text (not just summary) for better Q&A
-    background_tasks.add_task(embed_and_store_note_chunks, new_note.id, full_text)
+    user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
+
+    background_tasks.add_task(embed_and_store_note_chunks, note_id_str, full_text)
     return {"source": "ai", "note": note_to_dict(new_note)}
 
 
@@ -356,91 +350,96 @@ async def generate_from_pdf(
 @limiter.limit("15/minute")
 def query_note(
     request: Request,
-    note_id: int,
+    note_id: Union[int, str],
     query: str,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-    user=Depends(get_verified_user),
+    db = Depends(get_db),
+    user = Depends(get_verified_user),
 ):
-    # ── Auth ──────────────────────────────────────────────────────────────────
-    user_note = db.query(UserNotes).filter(
-        UserNotes.user_id == user.id, UserNotes.note_id == note_id
-    ).first()
-    if not user_note:
+    user_id_str = str(user.id)
+    note_id_str = str(note_id)
+
+    # ── Auth check ──
+    user_link = user_notes_col.find_one({"user_id": user_id_str, "note_id": note_id_str})
+    if not user_link:
+        obj_id = to_object_id(note_id)
+        if obj_id:
+            user_link = user_notes_col.find_one({"user_id": user_id_str, "note_id": str(obj_id)})
+
+    if not user_link:
         raise HTTPException(status_code=403, detail="Access denied to this note")
 
-    note = db.query(Notes).filter(Notes.id == note_id).first()
+    note = notes_col.find_one(id_filter(note_id))
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
 
-    # ── Cache Check ───────────────────────────────────────────────────────────
-    cache_key = f"qa:{note_id}:{hashlib.sha256(query.strip().lower().encode()).hexdigest()}"
+    cache_key = f"qa:{note_id_str}:{hashlib.sha256(query.strip().lower().encode()).hexdigest()}"
     if redis_client:
         try:
             cached_res = redis_client.get(cache_key)
             if cached_res:
-                log.info("qa_cache_hit", note_id=note_id, query=query)
+                log.info("qa_cache_hit", note_id=note_id_str, query=query)
                 return json.loads(cached_res)
         except Exception as e:
             log.warning("qa_cache_read_failed", error=str(e))
 
-    # ── Query embedding (RETRIEVAL_QUERY task type) ───────────────────────────
     try:
         query_emb = get_query_embedding(query)
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Query embedding failed: {e}")
 
-    # ── Retrieve chunks ───────────────────────────────────────────────────────
     with tracer.start_as_current_span("retrieve_chunks") as span:
-        span.set_attribute("note_id", note_id)
-        chunks = db.query(DocumentChunk).filter(DocumentChunk.note_id == note_id).all()
+        span.set_attribute("note_id", note_id_str)
+        chunks = list(document_chunks_col.find({"note_id": note_id_str}))
 
         if not chunks:
             span.set_attribute("retrieve_chunks.on_demand_fallback", True)
-            # On-demand fallback: chunk + embed note content right now
-            note_chunks = chunk_text(note.content, max_chunk_size=1000, overlap=200)
+            note_chunks = chunk_text(note.get("content", ""), max_chunk_size=1000, overlap=200)
+            docs_to_insert = []
             for chunk_txt in note_chunks:
                 if not chunk_txt.strip():
                     continue
                 try:
                     emb = get_embedding(chunk_txt)
-                    chunk_obj = DocumentChunk(note_id=note_id, chunk_text=chunk_txt, embedding=emb, embedding_vec=emb)
-                    db.add(chunk_obj)
-                    chunks.append(chunk_obj)
+                    if emb:
+                        docs_to_insert.append({
+                            "note_id": note_id_str,
+                            "chunk_text": chunk_txt,
+                            "embedding": emb,
+                            "created_at": datetime.utcnow()
+                        })
                 except Exception as e:
-                    log.warning("on_demand_embed_failed", note_id=note_id, error=str(e))
-            db.commit()
+                    log.warning("on_demand_embed_failed", note_id=note_id_str, error=str(e))
+
+            if docs_to_insert:
+                document_chunks_col.insert_many(docs_to_insert)
+                chunks = docs_to_insert
 
         span.set_attribute("retrieve_chunks.count", len(chunks))
 
     if not chunks:
         raise HTTPException(status_code=400, detail="No retrievable content found for this note")
 
-    # ── Score + rank ──────────────────────────────────────────────────────────
     scored = []
     for c in chunks:
-        emb = c.embedding_vec if c.embedding_vec is not None else c.embedding
-        scored.append((cosine_similarity(query_emb, emb), c.chunk_text))
+        emb = c.get("embedding")
+        if emb:
+            scored.append((cosine_similarity(query_emb, emb), c.get("chunk_text", "")))
     scored.sort(key=lambda x: x[0], reverse=True)
 
-    # Dynamic top-k: take top 5 but drop any with score < 0.3 (likely irrelevant)
     SIMILARITY_THRESHOLD = 0.3
     top_chunks = [
         (score, text) for score, text in scored[:6]
         if score >= SIMILARITY_THRESHOLD
     ]
-
-    # If nothing passes threshold, fall back to top 3 regardless
     if not top_chunks:
         top_chunks = scored[:3]
 
-    # ── Build context ─────────────────────────────────────────────────────────
     context_parts = []
     for rank, (score, text) in enumerate(top_chunks, 1):
         context_parts.append(f"[Source {rank} — relevance {score:.0%}]\n{text}")
     context = "\n\n---\n\n".join(context_parts)
 
-    # ── LLM prompt ───────────────────────────────────────────────────────────
     prompt = [
         {
             "role": "system",
@@ -452,15 +451,10 @@ def query_note(
                 "provided document excerpts. If a fact or detail is not directly and explicitly mentioned in the "
                 "excerpts, you must treat it as completely non-existent. Do not use your own prior knowledge, "
                 "external background information, or any outside examples under any circumstances.\n"
-                "2. NO EXTRAPOLATION: Do not infer, extrapolate, or assume facts beyond what is written. It is far "
-                "better to give a shorter, incomplete answer that is 100% faithful to the text than a complete answer "
-                "that uses outside knowledge.\n"
-                "3. NO HELPFUL ADDITIONS: Do not add extra explanations, background, examples, or additional context "
-                "unless they are directly present in the retrieved excerpts. Do not include any 'Note:', 'Additional Context:', "
-                "or supplementary sections containing facts outside the source text.\n"
+                "2. NO EXTRAPOLATION: Do not infer, extrapolate, or assume facts beyond what is written.\n"
+                "3. NO HELPFUL ADDITIONS: Do not add extra explanations, background, examples, or additional context.\n"
                 "4. CITATION ENFORCEMENT: Every single factual claim, statement, definition, or bullet point in your answer "
-                "MUST end with a citation mapping to the specific source chunk it was drawn from (e.g., [Source 1] or [Source 2]). "
-                "If you cannot cite a specific Source for a sentence, you MUST NOT write that sentence.\n"
+                "MUST end with a citation mapping to the specific source chunk it was drawn from (e.g., [Source 1] or [Source 2]).\n"
                 "5. If the answer is NOT in the excerpts at all, you must respond with: "
                 "'This specific information isn't covered in the provided document sections.' Do not attempt to answer."
             ),
@@ -499,3 +493,21 @@ def query_note(
             log.warning("qa_cache_write_failed", error=str(e))
 
     return res
+
+
+@router.delete("/{note_id}")
+def delete_note(
+    note_id: Union[int, str],
+    db = Depends(get_db),
+    user = Depends(get_verified_user)
+):
+    user_id_str = str(user.id)
+    note_id_str = str(note_id)
+
+    user_notes_col.delete_one({"user_id": user_id_str, "note_id": note_id_str})
+    remaining = user_notes_col.find_one({"note_id": note_id_str})
+    if not remaining:
+        notes_col.delete_one(id_filter(note_id))
+        document_chunks_col.delete_many({"note_id": note_id_str})
+
+    return {"message": "Note deleted successfully"}

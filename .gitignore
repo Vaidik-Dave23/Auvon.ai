@@ -7,6 +7,8 @@
 cloudrun.env
 Backend/.env
 Backend/cloudrun.env
+azure.env
+Backend/azure.env
 
 # ======================
 # 🐍 PYTHON (BACKEND)

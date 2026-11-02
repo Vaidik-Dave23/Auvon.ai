@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import Sidebar from "../components/Sidebar";
+import { useTheme } from "../context/ThemeContext";
+import { getCreativeGreeting } from "../utils/greetings";
 
 function Dashboard() {
   const [tasks, setTasks] = useState([]);
@@ -9,6 +11,7 @@ function Dashboard() {
   const [goals, setGoals] = useState([]);
   const [user, setUser] = useState(null);
   const [lastScore, setLastScore] = useState("—");
+  const [greetingText, setGreetingText] = useState("");
 
   const [newTask, setNewTask] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -18,6 +21,7 @@ function Dashboard() {
   const [taskError, setTaskError] = useState("");
 
   const navigate = useNavigate();
+  const { isAlpine } = useTheme();
 
   // Fetch all initial data
   const fetchData = async () => {
@@ -27,16 +31,24 @@ function Dashboard() {
         api.get("/progress/daily"),
         api.get("/progress/goals"),
         api.get("/me").catch(() => null),
-        api.get("/tests").catch(() => ({ data: [] }))
+        api.get("/tests").catch(() => ({ data: [] })),
       ]);
 
       setTasks(tasksRes.data);
       setDaily(dailyRes.data);
-      setGoals(goalsRes.data);
-      if (userRes) setUser(userRes.data);
+
+      // Sort goals by id descending so the latest created goal is always top priority
+      const sortedGoals = (goalsRes.data || []).sort((a, b) => b.id - a.id);
+      setGoals(sortedGoals);
+
+      if (userRes) {
+        setUser(userRes.data);
+        setGreetingText(getCreativeGreeting(userRes.data.name));
+      } else {
+        setGreetingText(getCreativeGreeting(""));
+      }
 
       if (testsRes && testsRes.data.length > 0) {
-        // Sort by creation or test_id desc
         const sortedTests = testsRes.data.sort((a, b) => b.test_id - a.test_id);
         setLastScore(`${sortedTests[0].score}%`);
       } else {
@@ -76,14 +88,13 @@ function Dashboard() {
       setDaily({
         ...daily,
         total: newTotalCount,
-        percent: newPercent
+        percent: newPercent,
       });
     }
 
     try {
       const res = await api.post(`/tasks?title=${encodeURIComponent(taskTitle)}`);
-      // Reconcile the temp ID with the database ID
-      setTasks(current => current.map(t => t.id === tempId ? res.data : t));
+      setTasks((current) => current.map((t) => (t.id === tempId ? res.data : t)));
     } catch (err) {
       console.error(err);
       setTasks(prevTasks);
@@ -97,15 +108,13 @@ function Dashboard() {
     const prevTasks = tasks;
     const prevDaily = daily;
 
-    const task = tasks.find(t => t.id === id);
+    const task = tasks.find((t) => t.id === id);
     if (!task) return;
 
     const newDone = !task.done;
 
-    // 1. Optimistic Tasks update
-    setTasks(tasks.map(t => t.id === id ? { ...t, done: newDone } : t));
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, done: newDone } : t)));
 
-    // 2. Optimistic Daily Progress update
     if (daily) {
       const delta = newDone ? 1 : -1;
       const newDoneCount = Math.max(0, daily.done + delta);
@@ -113,7 +122,7 @@ function Dashboard() {
       setDaily({
         ...daily,
         done: newDoneCount,
-        percent: newPercent
+        percent: newPercent,
       });
     }
 
@@ -132,13 +141,11 @@ function Dashboard() {
     const prevTasks = tasks;
     const prevDaily = daily;
 
-    const task = tasks.find(t => t.id === id);
+    const task = tasks.find((t) => t.id === id);
     if (!task) return;
 
-    // 1. Optimistic Tasks update
-    setTasks(tasks.filter(t => t.id !== id));
+    setTasks(tasks.filter((t) => t.id !== id));
 
-    // 2. Optimistic Daily Progress update
     if (daily) {
       const newTotalCount = Math.max(0, daily.total - 1);
       const newDoneCount = task.done ? Math.max(0, daily.done - 1) : daily.done;
@@ -146,7 +153,7 @@ function Dashboard() {
       setDaily({
         total: newTotalCount,
         done: newDoneCount,
-        percent: newPercent
+        percent: newPercent,
       });
     }
 
@@ -177,23 +184,23 @@ function Dashboard() {
     }
   };
 
-  // Get active goal title for stats card
-  const getActiveGoalName = () => {
-    if (goals.length > 0) {
-      // Find goal with lowest progress < 100
-      const active = goals.find(g => g.progress < 100) || goals[0];
-      return active.title;
-    }
-    return "None Active";
-  };
+  // Identify Active Goal
+  const activeGoal =
+    goals.length > 0 ? goals.find((g) => g.progress < 100) || goals[0] : null;
 
-  // Format today's date: e.g. "Saturday, 22 June"
+  const goalIdFormatted = activeGoal
+    ? `GOAL-${String(activeGoal.id).padStart(3, "0")}`
+    : "GOAL-001";
+
+  const goalProgress = activeGoal ? activeGoal.progress || 0 : 0;
+
+  // Format today's date
   const getFormattedDate = () => {
-    const options = { weekday: 'long', day: 'numeric', month: 'long' };
-    return new Date().toLocaleDateString('en-US', options);
+    const options = { weekday: "long", day: "numeric", month: "long" };
+    return new Date().toLocaleDateString("en-US", options);
   };
 
-  // Get dynamic greeting based on time of day
+  // Dynamic greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
     if (hour < 12) return "Good morning";
@@ -202,64 +209,171 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-page flex text-text-primary font-sans">
+    <div className="min-h-screen flex flex-col bg-canvas text-[var(--text-primary)] font-sans antialiased">
+      {/* FLOATING TOP NAVIGATION DOCK */}
       <Sidebar />
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 h-screen overflow-y-auto p-8 flex flex-col gap-8 animate-fade-in">
+      {/* MAIN CONTAINER with generous width */}
+      <main className="w-full max-w-[1560px] mx-auto px-6 md:px-10 pb-20 flex flex-col gap-8 flex-1 animate-fade-in">
+        {/* EDITORIAL PAGE HEADER WITH CREATIVE GREETING */}
         <header className="flex flex-col gap-1">
-          <p className="text-xs text-text-tertiary font-semibold uppercase tracking-wider">
+          <p className="text-xs text-[var(--text-muted)] tracking-wider uppercase font-semibold">
             {getFormattedDate()}
           </p>
-          <h1 className="font-serif text-3xl font-semibold text-text-primary">
-            {getGreeting()}, {user?.name || "Student"}
+          <h1 className="font-heading text-3xl md:text-4xl font-bold tracking-tight text-[var(--text-primary)]">
+            {greetingText || (user?.name ? `Welcome back, ${user.name}` : "Welcome to Auvon ai")}
           </h1>
         </header>
 
-        {/* STATS ROW (Mockup Style: Single container with borders and split cells) */}
-        <div className="bg-surface border border-border rounded-xl flex w-full divide-x divide-border">
+        {/* ACTIVE GOAL HERO CARD */}
+        <section className="auvon-card">
+          {/* 1. Top Status Row (Clean User-Friendly Badges) */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div className="flex items-center gap-3">
+              <span className="auvon-telemetry-badge">
+                Active Goal
+              </span>
+              <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                Current Priority
+              </span>
+            </div>
+
+            <span className="font-mono text-sm font-semibold text-[var(--accent-primary)]">
+              {goalProgress}% Complete {activeGoal ? `(in progress)` : ""}
+            </span>
+          </div>
+
+          {/* 2. Main Goal Title */}
+          <h2 className="font-heading text-3xl md:text-4xl font-bold tracking-tight text-[var(--text-primary)] mt-4 mb-2">
+            {activeGoal ? activeGoal.title : "No active learning goal yet"}
+          </h2>
+
+          {/* 3. Goal Subtitle / Description */}
+          <p className="text-base leading-relaxed text-[var(--text-secondary)] max-w-[840px]">
+            {activeGoal
+              ? "Follow your curated weekly milestones with high-yield video tutorials, interactive study notes, and calm knowledge checkpoints."
+              : "Cultivate your next milestone. Generate a personalized AI roadmap with videos, notes, and quizzes."}
+          </p>
+
+          {/* 4. Slim Linear Progress Track */}
+          <div
+            className="w-full my-6 rounded-full overflow-hidden p-0.5"
+            style={{
+              height: "8px",
+              backgroundColor: "var(--border-subtle)",
+            }}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{
+                width: `${goalProgress}%`,
+                backgroundColor: "var(--accent-primary)",
+              }}
+            />
+          </div>
+
+          {/* 5. Bottom Action Bar */}
+          <div className="pt-4 border-t border-[var(--border-subtle)] flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={() =>
+                  activeGoal
+                    ? navigate(`/goals/${activeGoal.id}`)
+                    : navigate("/goals?create=true")
+                }
+                className="auvon-pill-btn-primary cursor-pointer text-sm"
+              >
+                <span>▶</span>
+                <span>
+                  {activeGoal ? "Resume Learning Workspace" : "+ Create First Goal"}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/notes")}
+                className="auvon-pill-btn-secondary cursor-pointer text-sm"
+              >
+                Read AI Study Notes
+              </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/tests")}
+                className="auvon-pill-btn-secondary cursor-pointer text-sm"
+              >
+                Take Calm Quiz
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => navigate("/goals?create=true")}
+              className="font-mono text-xs text-[var(--text-secondary)] hover:text-[var(--accent-primary)] underline cursor-pointer transition-colors"
+            >
+              + Cultivate New Goal
+            </button>
+          </div>
+        </section>
+
+        {/* STATS TELEMETRY ROW */}
+        <section
+          className="auvon-card !p-0 overflow-hidden divide-y md:divide-y-0 md:divide-x divide-[var(--border-subtle)] flex flex-col md:flex-row"
+        >
           <div className="flex-1 p-6 flex flex-col gap-1">
-            <span className="text-text-tertiary text-xs font-semibold uppercase tracking-wider">
+            <span className="font-mono text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
               Tasks done today
             </span>
-            <span className="text-4xl font-medium text-text-primary mt-1">
-              {daily?.done ?? 0} <span className="text-text-tertiary text-2xl font-light">/ {daily?.total ?? 0}</span>
+            <span className="text-3xl md:text-4xl font-semibold text-[var(--text-primary)] mt-1 font-heading">
+              {daily?.done ?? 0}{" "}
+              <span className="text-xl font-normal text-[var(--text-muted)]">
+                / {daily?.total ?? 0}
+              </span>
             </span>
           </div>
 
           <div className="flex-1 p-6 flex flex-col gap-1 overflow-hidden">
-            <span className="text-text-tertiary text-xs font-semibold uppercase tracking-wider">
-              Active goal
+            <span className="font-mono text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+              Active Focus
             </span>
-            <span className="font-serif text-2xl text-text-primary truncate mt-2" title={getActiveGoalName()}>
-              {getActiveGoalName()}
+            <span
+              className="text-xl font-semibold text-[var(--text-primary)] truncate mt-2 font-heading"
+              title={activeGoal?.title || "None Active"}
+            >
+              {activeGoal?.title || "None Active"}
             </span>
           </div>
 
           <div className="flex-1 p-6 flex flex-col gap-1">
-            <span className="text-text-tertiary text-xs font-semibold uppercase tracking-wider">
-              Last test score
+            <span className="font-mono text-[11px] font-semibold text-[var(--text-muted)] uppercase tracking-wider">
+              Last Checkpoint Score
             </span>
-            <span className={`text-4xl font-semibold mt-1 ${lastScore !== "—" ? "text-success" : "text-text-primary"}`}>
+            <span className="text-3xl md:text-4xl font-semibold mt-1 font-heading text-[var(--accent-primary)]">
               {lastScore}
             </span>
           </div>
-        </div>
+        </section>
 
-        {/* LOWER SECTION GRID */}
+        {/* LOWER SECTION: TASKS & PROGRESS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* TODAY'S TASKS PANEL */}
-          <div className="bg-surface border border-border rounded-xl p-6 flex flex-col">
+          {/* TODAY'S TASKS */}
+          <section className="auvon-card flex flex-col">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="font-serif text-xl font-medium text-text-primary">
-                Today's tasks
-              </h2>
-              <span className="text-xs font-semibold text-text-tertiary font-sans">
+              <div>
+                <h3 className="font-heading text-xl font-semibold text-[var(--text-primary)]">
+                  {isAlpine ? "Daily Focus Tasks" : "Today's Tasks"}
+                </h3>
+                <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                  Keep your momentum steady
+                </p>
+              </div>
+              <span className="font-mono text-xs text-[var(--text-secondary)] font-medium">
                 {daily?.done ?? 0} of {daily?.total ?? 0}
               </span>
             </div>
 
-            {/* TASK INPUT ROW */}
+            {/* Input Row */}
             <div className="flex gap-2 mb-6">
               <input
                 value={newTask}
@@ -267,62 +381,73 @@ function Dashboard() {
                   setNewTask(e.target.value);
                   if (taskError) setTaskError("");
                 }}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
-                placeholder="Add a task for today..."
-                className={`flex-1 px-4 py-2.5 rounded-lg bg-input border ${
-                  taskError ? "border-danger" : "border-border"
-                } text-text-primary placeholder:text-text-tertiary/60 focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all text-sm font-sans`}
+                onKeyDown={(e) => e.key === "Enter" && handleAddTask()}
+                placeholder={
+                  isAlpine
+                    ? "Add a focus checkpoint for today..."
+                    : "Add a task for today..."
+                }
+                className="flex-1 px-4 py-2.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] text-sm focus:outline-none focus:ring-1 focus:ring-[var(--accent-primary)] transition-all"
               />
               <button
+                type="button"
                 onClick={handleAddTask}
-                className="bg-control text-text-primary border border-border hover:bg-black/40 px-5 py-2.5 rounded-lg font-sans font-semibold text-sm transition-all focus:outline-none focus:ring-1 focus:ring-accent"
+                className="auvon-pill-btn-primary text-xs py-2 px-5 cursor-pointer"
               >
                 Add
               </button>
             </div>
 
             {taskError && (
-              <p className="text-xs text-danger font-medium mb-4 flex items-center gap-2">
+              <p className="text-xs text-red-500 font-medium mb-4 flex items-center gap-2">
                 {taskError}{" "}
-                <button onClick={handleAddTask} className="text-accent hover:underline font-semibold">
+                <button
+                  type="button"
+                  onClick={handleAddTask}
+                  className="text-[var(--accent-primary)] hover:underline font-semibold"
+                >
                   Retry
                 </button>
               </p>
             )}
 
-            {/* TASKS LIST */}
-            <div className="space-y-3 max-h-[350px] overflow-y-auto pr-1">
+            {/* Tasks list */}
+            <div className="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
               {tasksLoading ? (
-                // Tasks Skeleton Loader
                 Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="h-14 rounded-lg bg-surface-alt border border-border-subtle animate-pulse flex items-center px-4" />
+                  <div
+                    key={i}
+                    className="h-12 rounded-xl bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] animate-pulse"
+                  />
                 ))
               ) : (
                 tasks.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between gap-3 p-4 rounded-lg bg-surface-alt border border-border-subtle hover:border-border transition-all group"
+                    className="flex items-center justify-between gap-3 p-3.5 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] hover:border-[var(--accent-border)] transition-all group"
                   >
                     <div className="flex items-center gap-3 flex-1 overflow-hidden">
                       <input
                         type="checkbox"
                         checked={task.done}
                         onChange={() => toggleTask(task.id)}
-                        className="w-5 h-5 rounded border-border bg-input text-accent focus:ring-accent cursor-pointer flex-shrink-0"
+                        className="w-4 h-4 rounded border-[var(--border-subtle)] text-[var(--accent-primary)] focus:ring-[var(--accent-primary)] cursor-pointer flex-shrink-0"
                       />
 
                       {editingId === task.id ? (
                         <input
                           value={editText}
                           onChange={(e) => setEditText(e.target.value)}
-                          onKeyDown={(e) => e.key === 'Enter' && saveEdit(task.id)}
-                          className="px-3 py-1 rounded bg-input border border-accent text-text-primary text-sm font-sans outline-none w-full"
+                          onKeyDown={(e) => e.key === "Enter" && saveEdit(task.id)}
+                          className="px-3 py-1 rounded bg-[var(--bg-surface)] border border-[var(--accent-primary)] text-[var(--text-primary)] text-sm outline-none w-full font-sans"
                           autoFocus
                         />
                       ) : (
                         <span
-                          className={`text-sm font-sans transition-all duration-300 truncate ${
-                            task.done ? "line-through text-text-tertiary" : "text-text-primary"
+                          className={`text-sm transition-all truncate ${
+                            task.done
+                              ? "line-through text-[var(--text-muted)]"
+                              : "text-[var(--text-primary)] font-medium"
                           }`}
                         >
                           {task.title}
@@ -330,27 +455,28 @@ function Dashboard() {
                       )}
                     </div>
 
-                    {/* ACTIONS */}
-                    <div className="flex gap-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-xs">
+                    <div className="flex gap-2.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 text-xs">
                       {editingId === task.id ? (
                         <button
+                          type="button"
                           onClick={() => saveEdit(task.id)}
-                          className="text-success font-semibold hover:underline"
+                          className="text-[var(--accent-primary)] font-semibold hover:underline"
                         >
                           Save
                         </button>
                       ) : (
                         <button
+                          type="button"
                           onClick={() => startEdit(task)}
-                          className="text-accent font-semibold hover:underline"
+                          className="text-[var(--text-secondary)] hover:text-[var(--accent-primary)] font-medium"
                         >
                           Edit
                         </button>
                       )}
-
                       <button
+                        type="button"
                         onClick={() => deleteTask(task.id)}
-                        className="text-danger font-semibold hover:underline"
+                        className="text-red-500 hover:text-red-600 font-medium"
                       >
                         Delete
                       </button>
@@ -360,77 +486,88 @@ function Dashboard() {
               )}
 
               {!tasksLoading && tasks.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-12 text-center">
-                  <p className="text-sm text-text-tertiary font-sans">
-                    Nothing planned yet — add your first task above.
-                  </p>
+                <div className="flex flex-col items-center justify-center py-10 text-center text-sm text-[var(--text-muted)]">
+                  Nothing planned yet — add your first daily task above.
                 </div>
               )}
             </div>
-          </div>
+          </section>
 
-          {/* PROGRESS PANEL */}
-          <div className="bg-surface border border-border rounded-xl p-6 flex flex-col gap-6">
-            <h2 className="font-serif text-xl font-medium text-text-primary mb-2">
-              Progress
-            </h2>
-
-            {/* GOALS PROGRESS */}
-            <div className="flex flex-col gap-4">
-              <span className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
-                Active Goals
-              </span>
-
-              <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
-                {goals.map((goal) => (
-                  <div key={goal.id} className="flex flex-col gap-2">
-                    <div className="flex justify-between items-end text-sm">
-                      <p className="font-medium text-text-primary truncate pr-4">
-                        {goal.title}
-                      </p>
-                      <span className="text-text-tertiary text-xs font-medium">
-                        {goal.progress}% complete
-                      </span>
-                    </div>
-
-                    <div className="bg-surface-alt h-1 rounded-full overflow-hidden border border-border-subtle">
-                      <div
-                        className="bg-accent h-full rounded-full transition-all duration-1000 ease-out"
-                        style={{ width: `${goal.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-
-                {goals.length === 0 && (
-                  <p className="text-sm text-text-tertiary italic">
-                    No active goals.
-                  </p>
-                )}
-              </div>
+          {/* PROGRESS & ACTIVE TRAILS */}
+          <section className="auvon-card flex flex-col gap-6">
+            <div>
+              <h3 className="font-heading text-xl font-semibold text-[var(--text-primary)]">
+                Roadmap Progress
+              </h3>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                Overview of your active learning trajectories
+              </p>
             </div>
 
-            {/* DAILY TASK GOAL PROGRESS */}
-            <div className="border-t border-border-subtle pt-6 flex flex-col gap-3">
-              <div className="flex justify-between items-center text-sm">
-                <span className="font-medium text-text-primary">
-                  Daily task goal
+            <div className="space-y-4 max-h-[220px] overflow-y-auto pr-1">
+              {goals.map((goal) => (
+                <div
+                  key={goal.id}
+                  onClick={() => navigate(`/goals/${goal.id}`)}
+                  className="flex flex-col gap-2 p-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-surface-subtle)] hover:border-[var(--accent-primary)] cursor-pointer transition-all"
+                >
+                  <div className="flex justify-between items-center text-sm">
+                    <p className="font-medium text-[var(--text-primary)] truncate pr-4">
+                      {goal.title}
+                    </p>
+                    <span className="font-mono text-xs font-semibold text-[var(--accent-primary)]">
+                      {goal.progress}%
+                    </span>
+                  </div>
+
+                  <div
+                    className="h-1.5 rounded-full overflow-hidden"
+                    style={{ backgroundColor: "var(--border-subtle)" }}
+                  >
+                    <div
+                      className="h-full rounded-full transition-all duration-700 ease-out"
+                      style={{
+                        width: `${goal.progress}%`,
+                        backgroundColor: "var(--accent-primary)",
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+
+              {goals.length === 0 && (
+                <p className="text-sm text-[var(--text-muted)] italic py-4">
+                  No active goals yet. Click "+ New Goal" in the dock to start.
+                </p>
+              )}
+            </div>
+
+            {/* Daily Task Goal Gauge */}
+            <div className="border-t border-[var(--border-subtle)] pt-4 flex flex-col gap-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="font-medium text-[var(--text-secondary)]">
+                  Daily completion target
                 </span>
-                <span className="text-text-tertiary text-xs font-medium">
-                  {daily?.done || 0} of {daily?.total || 0} tasks
+                <span className="font-mono font-semibold text-[var(--accent-primary)]">
+                  {daily?.percent || 0}%
                 </span>
               </div>
-
-              <div className="bg-surface-alt h-1 rounded-full overflow-hidden border border-border-subtle">
+              <div
+                className="h-2 rounded-full overflow-hidden"
+                style={{ backgroundColor: "var(--border-subtle)" }}
+              >
                 <div
-                  className="bg-accent h-full rounded-full transition-all duration-1000 ease-out"
-                  style={{ width: `${daily?.percent || 0}%` }}
+                  className="h-full rounded-full transition-all duration-500 ease-out"
+                  style={{
+                    width: `${daily?.percent || 0}%`,
+                    backgroundColor: "var(--accent-primary)",
+                  }}
                 />
               </div>
             </div>
-          </div>
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

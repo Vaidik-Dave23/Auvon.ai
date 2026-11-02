@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from datetime import datetime
+from typing import Union, Optional, Any
 
 
 class UserCreate(BaseModel):
@@ -14,26 +15,29 @@ class UserLogin(BaseModel):
 
 
 class UserOut(BaseModel):
-    id: int
+    id: Union[int, str]
     name: str
     email: EmailStr
-    created_at: datetime
+    created_at: Optional[Union[datetime, str]] = None
     is_verified: bool
 
     class Config:
-        from_attributes = True   
+        from_attributes = True
+
 
 class UserUpdate(BaseModel):
     name: str
     email: EmailStr
 
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class VerifyEmailRequest(BaseModel):
     code: str
 
+
 class GoogleAuthRequest(BaseModel):
     credential: str
-

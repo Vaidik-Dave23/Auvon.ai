@@ -26,105 +26,124 @@ function TestResult() {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-page flex items-center justify-center text-text-primary">
-      <div className="flex flex-col items-center gap-4">
-        <svg className="animate-spin h-10 w-10 text-accent" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <p className="text-text-secondary">Loading results...</p>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-canvas)] flex items-center justify-center text-[var(--text-primary)]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 border-3 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] rounded-full animate-spin" />
+          <p className="text-xs font-mono text-[var(--text-secondary)]">Analyzing results...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
-  if (!result) return (
-    <div className="min-h-screen bg-page flex items-center justify-center text-text-primary">
-      <div className="bg-surface border border-border p-8 rounded-xl text-center">
-        <p className="text-text-secondary mb-4">No result found — attempt the test first.</p>
-        <button onClick={() => navigate("/tests")} className="text-accent hover:underline font-semibold">Back to Tests</button>
+  if (!result) {
+    return (
+      <div className="min-h-screen bg-[var(--bg-canvas)] flex items-center justify-center text-[var(--text-primary)] p-6">
+        <div className="auvon-card text-center max-w-md w-full">
+          <p className="text-sm text-[var(--text-secondary)] mb-4">No result found — attempt the test first.</p>
+          <button
+            onClick={() => navigate("/tests")}
+            className="auvon-pill-btn-primary px-6 py-2.5 text-xs font-semibold cursor-pointer"
+          >
+            Back to Checkpoints
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   const review = result.review || [];
   const totalQuestions = result.total || review.length || 5;
-  const correctCount = result.correct !== undefined ? result.correct : Math.round((result.score / 100) * totalQuestions);
+  const correctCount =
+    result.correct !== undefined ? result.correct : Math.round((result.score / 100) * totalQuestions);
+  const scorePercent = result.score !== undefined ? Math.round(result.score) : Math.round((correctCount / totalQuestions) * 100);
 
   return (
-    <div className="min-h-screen bg-page flex text-text-primary font-sans">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-250">
       <Sidebar />
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 h-screen overflow-y-auto p-8 flex flex-col gap-6 animate-fade-in">
-        <header className="flex flex-col gap-1">
-          <p className="text-xs text-text-tertiary font-sans font-medium uppercase tracking-wide">
-            {result.topic || "Quiz"} · {result.difficulty || "easy"} · {totalQuestions} questions
-          </p>
-          <h1 className="font-serif text-3xl font-semibold text-text-primary">
-            Results
+      {/* Main Container */}
+      <main className="w-full max-w-[1100px] mx-auto px-6 pb-20 flex flex-col gap-8 flex-1 animate-fade-in">
+        <header className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <span className="auvon-telemetry-badge">
+              Assessment Results
+            </span>
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-primary)] font-heading">
+            Assessment Performance
           </h1>
+          <p className="text-xs font-mono text-[var(--text-secondary)]">
+            {result.topic || "Quiz"} • {result.difficulty || "standard"} • {totalQuestions} questions evaluated
+          </p>
         </header>
 
-        {/* TOP PANEL GRID */}
+        {/* Top Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
-          {/* SCORE CARD */}
-          <div className="bg-surface border border-border p-6 rounded-xl flex flex-col items-center justify-center text-center">
-            <span className="font-serif text-5xl font-semibold text-success mb-2">
-              {correctCount}/{totalQuestions}
+          {/* Score Card */}
+          <div className="auvon-card flex flex-col items-center justify-center text-center p-8">
+            <span className="text-5xl font-bold font-mono text-[var(--accent-primary)] mb-2 leading-none">
+              {scorePercent}%
             </span>
-            <span className="text-text-tertiary text-xs uppercase font-semibold tracking-wider">
-              correct
+            <span className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+              {correctCount} of {totalQuestions} Correct
             </span>
           </div>
 
-          {/* AI FEEDBACK CARD */}
-          <div className="bg-surface border border-border p-6 rounded-xl md:col-span-2 flex flex-col justify-center">
-            <span className="text-text-tertiary text-[10px] font-bold uppercase tracking-wider mb-2 block">
-              FEEDBACK
+          {/* AI Feedback Card */}
+          <div className="auvon-card md:col-span-2 flex flex-col justify-center p-8">
+            <span className="text-[11px] font-mono font-bold text-[var(--accent-primary)] uppercase tracking-wider mb-2 block">
+              Performance Feedback
             </span>
-            <p className="text-text-secondary text-sm leading-relaxed">
-              {result.ai_feedback || "Every question answered correctly. To keep progressing, try a higher difficulty or study a related subtopic."}
+            <p className="text-sm text-[var(--text-secondary)] leading-relaxed">
+              {result.ai_feedback ||
+                "Solid grasp of fundamental concepts. Review the detailed breakdown below to reinforce areas with missed nuance."}
             </p>
           </div>
         </div>
 
-        {/* ANSWER REVIEW LOGS */}
-        <div className="flex flex-col gap-4 mt-2">
-          <span className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
-            Answer Review
+        {/* Answer Breakdown */}
+        <div className="flex flex-col gap-4">
+          <span className="text-xs font-mono font-semibold text-[var(--text-secondary)] tracking-wider">
+            QUESTION-BY-QUESTION BREAKDOWN
           </span>
 
-          <div className="border border-border rounded-xl bg-surface divide-y divide-border overflow-hidden">
+          <div className="auvon-card !p-0 divide-y divide-[var(--border-subtle)] overflow-hidden">
             {review.map((item, i) => (
-              <div key={i} className="p-5 flex flex-col gap-3">
-                {/* Question Row Header */}
+              <div key={i} className="p-6 flex flex-col gap-3">
                 <div className="flex items-start gap-3">
-                  <span className="flex-shrink-0 mt-0.5">
+                  <div
+                    className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
+                      item.is_correct
+                        ? "bg-green-100 text-green-600 border border-green-200"
+                        : "bg-red-100 text-red-500 border border-red-200"
+                    }`}
+                  >
                     {item.is_correct ? (
-                      <svg className="h-4.5 w-4.5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
                     ) : (
-                      <svg className="h-4.5 w-4.5 text-danger" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M6 18L18 6M6 6l12 12" />
+                      <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
                       </svg>
                     )}
-                  </span>
+                  </div>
+
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-text-primary leading-relaxed font-sans">
+                    <p className="text-sm font-semibold text-[var(--text-primary)] leading-snug">
                       {item.question}
                     </p>
-                    
-                    {/* Answers text review */}
-                    <div className="mt-2 text-xs flex flex-col gap-1">
-                      <p className={item.is_correct ? "text-success" : "text-danger"}>
-                        {item.your_answer || "Not answered"}
+
+                    <div className="mt-3 flex flex-col gap-1 text-xs">
+                      <p className={`font-mono font-medium ${item.is_correct ? "text-green-600" : "text-red-500"}`}>
+                        Your response: {item.your_answer || "Not answered"}
                       </p>
-                      
+
                       {!item.is_correct && (
-                        <p className="text-text-secondary mt-1">
-                          Correct: {item.correct_answer}
+                        <p className="font-mono text-[var(--text-secondary)]">
+                          Correct response: <span className="text-[var(--accent-primary)] font-semibold">{item.correct_answer}</span>
                         </p>
                       )}
                     </div>
@@ -135,23 +154,23 @@ function TestResult() {
           </div>
         </div>
 
-        {/* ACTIONS */}
-        <div className="flex gap-4 mt-4">
+        {/* Action Buttons */}
+        <div className="flex items-center gap-4 pt-2">
           <button
             onClick={() => navigate("/tests")}
-            className="px-6 py-2.5 border border-border text-text-secondary rounded-lg text-sm font-semibold hover:text-text-primary hover:bg-surface-alt transition-colors focus:outline-none"
+            className="auvon-pill-btn-secondary px-6 py-3 text-xs font-semibold cursor-pointer"
           >
-            Back to tests
+            ← Back to Checkpoints
           </button>
 
           <button
             onClick={() => navigate(`/test/${id}`)}
-            className="px-6 py-2.5 bg-control border border-border text-text-primary rounded-lg text-sm font-semibold hover:bg-black transition-colors focus:outline-none"
+            className="auvon-pill-btn-primary px-6 py-3 text-xs font-semibold cursor-pointer"
           >
-            Retake test
+            ↻ Retake Checkpoint
           </button>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

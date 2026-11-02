@@ -1,8 +1,7 @@
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import jwt, JWTError
-from sqlalchemy.orm import Session
-from app.database import get_db
+from app.database import get_db, users_col, id_filter, serialize_doc
 from app.models.user import User
 import os
 import json
@@ -23,7 +22,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 def get_current_user(
     request: Request,
     token: str = Depends(oauth2_scheme),
-    db: Session = Depends(get_db)
+    db = Depends(get_db)
 ):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -32,7 +31,7 @@ def get_current_user(
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
 
-        request.state.user_id = user_id
+        request.state.user_id = str(user_id)
 
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -47,38 +46,28 @@ def get_current_user(
             logger.warning("user_cache_read_failed", error=str(e))
 
     if cached_user:
-        # IMPORTANT: do not just instantiate User(...) here. An object built this
-        # way is transient — it was never added to `db`'s session, so a later
-        # db.commit()/db.refresh() on it (e.g. in PUT /me) either silently fails
-        # to persist or raises InvalidRequestError. db.merge(..., load=False)
-        # attaches the cached state to the session's identity map WITHOUT
-        # emitting a SELECT, so we keep the caching benefit while ending up
-        # with a real, persistent, writable instance.
-        user = db.merge(
-            User(
-                id=cached_user["id"],
-                name=cached_user["name"],
-                email=cached_user["email"],
-                is_verified=cached_user["is_verified"]
-            ),
-            load=False
-        )
+        user = User(**cached_user)
     else:
-        user = db.query(User).filter(User.id == user_id).first()
-        if user and redis_client:
-            try:
-                redis_client.setex(
-                    f"user:{user_id}",
-                    30,
-                    json.dumps({
-                        "id": user.id,
-                        "name": user.name,
-                        "email": user.email,
-                        "is_verified": user.is_verified
-                    })
-                )
-            except Exception as e:
-                logger.warning("user_cache_write_failed", error=str(e))
+        user_doc = users_col.find_one(id_filter(user_id))
+        if user_doc:
+            user_doc = serialize_doc(user_doc)
+            user = User(**user_doc)
+            if redis_client:
+                try:
+                    redis_client.setex(
+                        f"user:{user_id}",
+                        30,
+                        json.dumps({
+                            "id": user.id,
+                            "name": user.name,
+                            "email": user.email,
+                            "is_verified": user.is_verified
+                        })
+                    )
+                except Exception as e:
+                    logger.warning("user_cache_write_failed", error=str(e))
+        else:
+            user = None
 
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")

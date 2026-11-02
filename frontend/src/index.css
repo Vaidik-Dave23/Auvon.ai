@@ -3,157 +3,211 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    /* Default Dark Theme / dark-editorial */
-    --bg-page:        #181716;  /* outermost background */
-    --bg-surface:      #232220;  /* cards, panels, content area */
-    --bg-surface-alt:  #1D1C1B;  /* secondary panel, e.g. "new note" sidebar */
-    --bg-sidebar:      #1A1918;  /* nav rail */
-    --bg-input:        #181716;  /* form fields */
-    --bg-control:      #151413;  /* dark action buttons (Generate, Start test) */
-
-    --border-default:  #333230;
-    --border-subtle:   #2E2D2B;
-    --border-dashed:   #3D3C3A;
-
-    --text-primary:    #F5F5F5;
-    --text-secondary:  #B7B6B3;
-    --text-tertiary:   #9E9D9B;
-
-    --accent:          #3B2FE3;
-    --accent-text:     #FFFFFF;
-
-    --success:         #4ADE80;  /* score/correct states only */
-    --danger:           #F87171;  /* error states only */
-
-    --font-serif: 'Newsreader', Georgia, serif;
-    --font-sans:  'Inter', system-ui, sans-serif;
-  }
-
-  [data-theme="dark"] {
-    --bg-page:        #181716;
-    --bg-surface:      #232220;
-    --bg-surface-alt:  #1D1C1B;
-    --bg-sidebar:      #1A1918;
-    --bg-input:        #181716;
-    --bg-control:      #151413;
-
-    --border-default:  #333230;
-    --border-subtle:   #2E2D2B;
-    --border-dashed:   #3D3C3A;
-
-    --text-primary:    #F5F5F5;
-    --text-secondary:  #B7B6B3;
-    --text-tertiary:   #9E9D9B;
-
-    --accent:          #3B2FE3;
-    --accent-text:     #FFFFFF;
-
-    --success:         #4ADE80;
-    --danger:           #F87171;
-
-    --font-serif: 'Newsreader', Georgia, serif;
-    --font-sans:  'Inter', system-ui, sans-serif;
-  }
-
-  [data-theme="dark-editorial"] {
-    --bg-page:        #181716;
-    --bg-surface:      #232220;
-    --bg-surface-alt:  #1D1C1B;
-    --bg-sidebar:      #1A1918;
-    --bg-input:        #181716;
-    --bg-control:      #151413;
-
-    --border-default:  #333230;
-    --border-subtle:   #2E2D2B;
-    --border-dashed:   #3D3C3A;
-
-    --text-primary:    #F5F5F5;
-    --text-secondary:  #B7B6B3;
-    --text-tertiary:   #9E9D9B;
-
-    --accent:          #3B2FE3;
-    --accent-text:     #FFFFFF;
-
-    --success:         #4ADE80;
-    --danger:           #F87171;
-
-    --font-serif: 'Newsreader', Georgia, serif;
-    --font-sans:  'Inter', system-ui, sans-serif;
-  }
-
+  :root,
+  [data-theme="soho"],
   [data-theme="light"] {
-    --bg-page:        #F8FAF4;  /* slightly warm light page */
-    --bg-surface:      #FFFFFF;
-    --bg-surface-alt:  #F4F3F0;
-    --bg-sidebar:      #ECEAE4;
-    --bg-input:        #FFFFFF;
-    --bg-control:      #ECEAE4;
+    --bg-canvas: #F4F6F9;
+    --bg-canvas-gradient: radial-gradient(circle at 15% 10%, rgba(0, 82, 255, 0.04), transparent 45%), #F4F6F9;
+    --bg-surface: #FFFFFF;
+    --bg-surface-subtle: #F8FAFC;
+    --bg-nav: rgba(255, 255, 255, 0.92);
+    --surface-backdrop: blur(16px);
 
-    --border-default:  #D4D2CD;
-    --border-subtle:   #E2E0D9;
-    --border-dashed:   #BCB9B3;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
 
-    --text-primary:    #1F1E1D;
-    --text-secondary:  #6E6C68;
-    --text-tertiary:   #9E9C96;
+    --accent-primary: #0052FF;         /* Electric Cobalt */
+    --accent-primary-hover: #0040CC;
+    --accent-soft: #EBF1FF;            /* Soft Cobalt pill background */
+    --accent-border: rgba(0, 82, 255, 0.18);
 
-    --accent:          #3B2FE3;
-    --accent-text:     #FFFFFF;
+    --border-subtle: #E2E8F0;
+    --border-card: rgba(15, 23, 42, 0.07);
 
-    --success:         #16A34A;
-    --danger:           #DC2626;
+    --radius-nav: 9999px;              /* Full pill floating navbar */
+    --radius-card: 24px;               /* Generous gallery porcelain corners */
+    --radius-btn: 9999px;              /* Pill buttons */
+    --radius-badge: 9999px;
 
-    --font-serif: 'Newsreader', Georgia, serif;
-    --font-sans:  'Inter', system-ui, sans-serif;
+    --shadow-nav: 0 10px 30px -10px rgba(15, 23, 42, 0.06), 0 1px 3px rgba(15, 23, 42, 0.04);
+    --shadow-card: 0 16px 40px -12px rgba(15, 23, 42, 0.05), 0 1px 2px rgba(15, 23, 42, 0.03);
+    --shadow-btn: 0 6px 16px -4px rgba(0, 82, 255, 0.35);
+
+    --font-heading: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    --font-body: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    --font-serif: 'Instrument Serif', Georgia, serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Backwards compatibility aliases */
+    --bg-page: var(--bg-canvas);
+    --bg-surface-alt: var(--bg-surface-subtle);
+    --bg-sidebar: var(--bg-nav);
+    --bg-input: var(--bg-surface-subtle);
+    --bg-control: var(--bg-surface-subtle);
+    --border-default: var(--border-subtle);
+    --border-dashed: var(--border-subtle);
+    --text-tertiary: var(--text-muted);
+    --accent: var(--accent-primary);
+    --accent-text: #FFFFFF;
+    --success: #16A34A;
+    --danger: #EF4444;
   }
 
-  [data-theme="ocean"] {
-    --bg-page:        #080E24;
-    --bg-surface:      #0D1940;
-    --bg-surface-alt:  #172554;
-    --bg-sidebar:      #091032;
-    --bg-input:        #080E24;
-    --bg-control:      #0F172A;
+  [data-theme="alpine"],
+  [data-theme="dark"] {
+    --bg-canvas: #EBF1EE;
+    --bg-canvas-gradient: 
+      radial-gradient(circle at 80% 15%, rgba(46, 125, 82, 0.09), transparent 45%),
+      radial-gradient(circle at 15% 80%, rgba(43, 108, 176, 0.06), transparent 50%),
+      #EBF1EE;
+    --bg-surface: rgba(255, 255, 255, 0.78);
+    --bg-surface-subtle: rgba(242, 247, 244, 0.75);
+    --bg-nav: rgba(255, 255, 255, 0.82);
+    --surface-backdrop: blur(20px) saturate(140%);
 
-    --border-default:  #1E293B;
-    --border-subtle:   #334155;
-    --border-dashed:   #475569;
+    --text-primary: #0F211C;           /* Deep Spruce Ink */
+    --text-secondary: #3D524B;
+    --text-muted: #6C827A;
 
-    --text-primary:    #F0F9FF;
-    --text-secondary:  #BAE6FD;
-    --text-tertiary:   #7DD3FC;
+    --accent-primary: #2E7D52;         /* Meadow Chartreuse / Alpine Pine */
+    --accent-primary-hover: #236340;
+    --accent-soft: #E3EFE8;            /* Soft Sage pill background */
+    --accent-border: rgba(46, 125, 82, 0.25);
 
-    --accent:          #38BDF8;
-    --accent-text:     #080E2C;
+    --border-subtle: rgba(15, 33, 28, 0.09);
+    --border-card: rgba(255, 255, 255, 0.85); /* Frosted quartz specular rim */
 
-    --success:         #10B981;
-    --danger:           #F43F5E;
+    --radius-nav: 22px;                /* Rounded architectural glass dock */
+    --radius-card: 22px;
+    --radius-btn: 9999px;
+    --radius-badge: 9999px;
 
-    --font-serif: 'Newsreader', Georgia, serif;
-    --font-sans:  'Inter', system-ui, sans-serif;
+    --shadow-nav: 0 12px 32px -12px rgba(15, 33, 28, 0.07), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    --shadow-card: 0 18px 42px -12px rgba(15, 33, 28, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    --shadow-btn: 0 6px 16px -4px rgba(46, 125, 82, 0.30);
+
+    --font-heading: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    --font-body: 'Plus Jakarta Sans', -apple-system, sans-serif;
+    --font-serif: 'Instrument Serif', Georgia, serif;
+    --font-mono: 'JetBrains Mono', monospace;
+
+    /* Backwards compatibility aliases */
+    --bg-page: var(--bg-canvas);
+    --bg-surface-alt: var(--bg-surface-subtle);
+    --bg-sidebar: var(--bg-nav);
+    --bg-input: var(--bg-surface-subtle);
+    --bg-control: var(--bg-surface-subtle);
+    --border-default: var(--border-subtle);
+    --border-dashed: var(--border-subtle);
+    --text-tertiary: var(--text-muted);
+    --accent: var(--accent-primary);
+    --accent-text: #FFFFFF;
+    --success: #2E7D52;
+    --danger: #EF4444;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    transition: background-color 250ms cubic-bezier(0.16, 1, 0.3, 1),
+                border-color 250ms cubic-bezier(0.16, 1, 0.3, 1),
+                color 250ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   body {
-    @apply bg-page text-text-primary font-sans antialiased selection:bg-accent selection:text-white transition-colors duration-300;
+    background: var(--bg-canvas-gradient);
+    background-attachment: fixed;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 }
 
-/* Custom Scrollbar for sleek dark mode */
+/* Core Component Utilities */
+.auvon-card {
+  background: var(--bg-surface);
+  backdrop-filter: var(--surface-backdrop);
+  -webkit-backdrop-filter: var(--surface-backdrop);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 36px 40px;
+  transition: all 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.auvon-telemetry-badge {
+  background: var(--accent-soft);
+  color: var(--accent-primary);
+  border: 1px solid var(--accent-border);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border-radius: var(--radius-badge);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.auvon-pill-btn-primary {
+  background: var(--accent-primary);
+  color: #FFFFFF;
+  padding: 12px 22px;
+  border-radius: var(--radius-btn);
+  font-weight: 600;
+  box-shadow: var(--shadow-btn);
+  transition: all 200ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.auvon-pill-btn-primary:hover {
+  background: var(--accent-primary-hover);
+  transform: translateY(-1px);
+}
+
+.auvon-pill-btn-secondary {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  padding: 12px 20px;
+  border-radius: var(--radius-btn);
+  font-weight: 500;
+  transition: all 200ms ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.auvon-pill-btn-secondary:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: var(--accent-soft);
+}
+
+/* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: var(--bg-page); 
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: var(--border-default); 
-  border-radius: 4px;
+  background: var(--border-subtle);
+  border-radius: 9999px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-dashed); 
+  background: var(--text-muted);
 }

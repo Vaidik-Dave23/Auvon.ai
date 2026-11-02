@@ -1,14 +1,26 @@
-from sqlalchemy import Column, Integer, Text, ForeignKey, DateTime, JSON
-from app.database import Base
 from datetime import datetime
-from pgvector.sqlalchemy import Vector
+from typing import List, Optional
 
-class DocumentChunk(Base):
-    __tablename__ = 'document_chunks'
 
-    id = Column(Integer, primary_key=True)
-    note_id = Column(Integer, ForeignKey('notes.id', ondelete="CASCADE"), nullable=False, index=True)
-    chunk_text = Column(Text, nullable=False)
-    embedding = Column(JSON, nullable=False)  # Stores the vector embedding list as a JSON array
-    embedding_vec = Column(Vector(3072), nullable=True)  # pgvector column matching Gemini embedding dimensions
-    created_at = Column(DateTime, default=datetime.utcnow)
+class DocumentChunk:
+    def __init__(self, **kwargs):
+        self._id = kwargs.get("_id")
+        self.id = str(kwargs.get("id") or self._id or "")
+        self.note_id = str(kwargs.get("note_id", ""))
+        self.chunk_text = kwargs.get("chunk_text", "")
+        self.embedding = kwargs.get("embedding") or []
+        self.embedding_vec = kwargs.get("embedding_vec") or self.embedding
+        self.created_at = kwargs.get("created_at") or datetime.utcnow()
+
+    def to_dict(self):
+        d = {
+            "note_id": self.note_id,
+            "chunk_text": self.chunk_text,
+            "embedding": self.embedding,
+            "created_at": self.created_at,
+        }
+        if self._id:
+            d["_id"] = self._id
+        if self.id:
+            d["id"] = self.id
+        return d

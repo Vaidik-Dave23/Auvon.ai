@@ -1,15 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request
-from sqlalchemy.orm import Session
 from datetime import datetime
+from typing import Union, List
 
-from app.database import get_db
-from app.models.test import Test, Question
-from app.models.results import Test_Result
+from app.database import (
+    get_db,
+    tests_col,
+    questions_col,
+    test_results_col,
+    user_answers_col,
+    id_filter,
+    to_object_id,
+    serialize_doc,
+)
 from app.schemas.test import (
     TestGenerateResponse,
     TestSubmitRequest,
     TestSubmitResponse,
-    QuestionOut
+    QuestionOut,
 )
 from app.services.ai import generate_questions, generate_weak_topic_review
 from app.utils.dependencies import get_verified_user
@@ -17,7 +24,6 @@ from app.core.logging_config import get_logger
 from app.core.limiter import limiter
 
 log = get_logger(__name__)
-from app.models.user_answer import UserAnswer
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 
@@ -31,8 +37,8 @@ async def generate_test(
     difficulty: str = Form("easy"),
     num_questions: int = Form(5),
     file: UploadFile = File(None),
-    db: Session = Depends(get_db),
-    user=Depends(get_verified_user)
+    db = Depends(get_db),
+    user = Depends(get_verified_user)
 ):
     content = ""
     test_topic = topic
@@ -60,64 +66,71 @@ async def generate_test(
         raise HTTPException(status_code=400, detail="Topic or file required")
 
     questions_data = generate_questions(content, num_questions, difficulty)
+    user_id_str = str(user.id)
 
-    new_test = Test(
-        user_id=user.id,
-        topic=test_topic,
-        difficulty=difficulty,
-        created_at=datetime.utcnow().isoformat()
-    )
-    db.add(new_test)
-    db.commit()
-    db.refresh(new_test)
+    new_test_doc = {
+        "user_id": user_id_str,
+        "topic": test_topic,
+        "difficulty": difficulty,
+        "created_at": datetime.utcnow().isoformat(),
+        "questions": []
+    }
+    inserted_test = tests_col.insert_one(new_test_doc)
+    test_id_str = str(inserted_test.inserted_id)
+    tests_col.update_one({"_id": inserted_test.inserted_id}, {"$set": {"id": test_id_str}})
 
     saved_questions = []
+    embedded_questions = []
 
     for q in questions_data:
-        question = Question(
-            test_id=new_test.id,
-            question_text=q["question"],
-            options=q["options"],
-            correct_answer=q["correct_answer"]
-        )
-        db.add(question)
-        db.commit()
-        db.refresh(question)
+        q_doc = {
+            "test_id": test_id_str,
+            "question_text": q["question"],
+            "options": q["options"],
+            "correct_answer": q["correct_answer"],
+        }
+        inserted_q = questions_col.insert_one(q_doc)
+        q_id_str = str(inserted_q.inserted_id)
+        questions_col.update_one({"_id": inserted_q.inserted_id}, {"$set": {"id": q_id_str}})
+        q_doc["id"] = q_id_str
+        embedded_questions.append(q_doc)
 
         saved_questions.append(
             QuestionOut(
-                id=question.id,
-                question=question.question_text,
-                options=question.options
+                id=q_id_str,
+                question=q["question"],
+                options=q["options"]
             )
         )
 
+    tests_col.update_one({"_id": inserted_test.inserted_id}, {"$set": {"questions": embedded_questions}})
+
     return TestGenerateResponse(
-        test_id=new_test.id,
+        test_id=test_id_str,
         questions=saved_questions
     )
 
 
 # 📚 HISTORY
 @router.get("")
-def get_tests(db: Session = Depends(get_db), user=Depends(get_verified_user)):
-    tests = db.query(Test).filter(Test.user_id == user.id).order_by(Test.created_at.desc()).all()
+def get_tests(db = Depends(get_db), user = Depends(get_verified_user)):
+    user_id_str = str(user.id)
+    tests = list(tests_col.find({"user_id": user_id_str}).sort("_id", -1))
 
     response = []
     for t in tests:
-        r = db.query(Test_Result).filter(
-            Test_Result.test_id == t.id,
-            Test_Result.user_id == user.id
-        ).first()
+        test_id_str = str(t.get("_id") or t.get("id"))
+        r = test_results_col.find_one({"test_id": test_id_str, "user_id": user_id_str})
+        questions = t.get("questions") or list(questions_col.find({"test_id": test_id_str}))
 
         response.append({
-            "test_id": t.id,
-            "topic": t.topic,
-            "difficulty": t.difficulty,
-            "score": r.last_score if r else None,
-            "best_score": r.best_score if r else None,
-            "created_at": t.created_at,
-            "num_questions": len(t.questions)
+            "test_id": test_id_str,
+            "topic": t.get("topic", ""),
+            "difficulty": t.get("difficulty", "easy"),
+            "score": r.get("last_score") if r else None,
+            "best_score": r.get("best_score") if r else None,
+            "created_at": t.get("created_at"),
+            "num_questions": len(questions)
         })
 
     return response
@@ -125,138 +138,148 @@ def get_tests(db: Session = Depends(get_db), user=Depends(get_verified_user)):
 
 # 📊 SUBMIT TEST
 @router.post("/submit", response_model=TestSubmitResponse)
-def submit_test(data: TestSubmitRequest, db: Session = Depends(get_db), user=Depends(get_verified_user)):
-    test = db.query(Test).filter(Test.id == data.test_id, Test.user_id == user.id).first()
+def submit_test(data: TestSubmitRequest, db = Depends(get_db), user = Depends(get_verified_user)):
+    user_id_str = str(user.id)
+    test_id_str = str(data.test_id)
+
+    flt = {"$and": [id_filter(test_id_str), {"user_id": user_id_str}]}
+    test = tests_col.find_one(flt)
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    questions = db.query(Question).filter(Question.test_id == data.test_id).all()
+    questions = test.get("questions") or list(questions_col.find({"test_id": test_id_str}))
+    if not questions:
+        questions = list(questions_col.find(id_filter(test_id_str)))
 
     correct = 0
     weak_topics = []
     review = []
 
-    # Delete previous answers for this test attempt (so we only keep latest)
-    db.query(UserAnswer).filter(
-        UserAnswer.user_id == user.id,
-        UserAnswer.test_id == data.test_id
-    ).delete()
-    db.commit()
+    user_answers_col.delete_many({
+        "user_id": user_id_str,
+        "test_id": test_id_str
+    })
 
     for q in questions:
-        user_ans = data.answers.get(str(q.id))
+        q_id_str = str(q.get("_id") or q.get("id"))
+        user_ans = data.answers.get(q_id_str) or data.answers.get(str(q.get("id", "")))
+        correct_ans = q.get("correct_answer", "")
+        q_text = q.get("question_text", "")
+
         is_correct = False
-        if user_ans and q.correct_answer:
-            is_correct = (user_ans == q.correct_answer) or user_ans.startswith(q.correct_answer)
+        if user_ans and correct_ans:
+            is_correct = (user_ans == correct_ans) or user_ans.startswith(correct_ans)
 
         if is_correct:
             correct += 1
         else:
-            weak_topics.append(q.question_text)
+            weak_topics.append(q_text)
 
-        ua = UserAnswer(
-            user_id=user.id,
-            test_id=data.test_id,
-            question_id=q.id,
-            question_text=q.question_text,
-            selected_answer=user_ans,
-            correct_answer=q.correct_answer,
-            is_correct=is_correct
-        )
-        db.add(ua)
+        ua = {
+            "user_id": user_id_str,
+            "test_id": test_id_str,
+            "question_id": q_id_str,
+            "question_text": q_text,
+            "selected_answer": user_ans,
+            "correct_answer": correct_ans,
+            "is_correct": is_correct
+        }
+        user_answers_col.insert_one(ua)
 
         review.append({
-            "question": q.question_text,
+            "question": q_text,
             "your_answer": user_ans,
-            "correct_answer": q.correct_answer,
+            "correct_answer": correct_ans,
             "is_correct": is_correct
         })
 
     total = len(questions)
     score = int((correct / total) * 100) if total > 0 else 0
 
-    # Generate fresh feedback and store it
     try:
         ai_feedback = generate_weak_topic_review(weak_topics, score, total)
     except Exception as e:
-        log.warning("ai_feedback_generation_failed", test_id=data.test_id, error=str(e))
+        log.warning("ai_feedback_generation_failed", test_id=test_id_str, error=str(e))
         ai_feedback = "Complete a test attempt to receive AI feedback."
 
-    existing = db.query(Test_Result).filter(
-        Test_Result.user_id == user.id,
-        Test_Result.test_id == data.test_id
-    ).first()
+    existing_result = test_results_col.find_one({
+        "user_id": user_id_str,
+        "test_id": test_id_str
+    })
 
-    if existing:
-        existing.last_score = score
-        existing.best_score = max(existing.best_score, score)
-        existing.last_feedback = ai_feedback
-    else:
-        result = Test_Result(
-            user_id=user.id,
-            test_id=data.test_id,
-            best_score=score,
-            last_score=score,
-            last_feedback=ai_feedback
+    if existing_result:
+        best_score = max(existing_result.get("best_score", 0), score)
+        test_results_col.update_one(
+            {"_id": existing_result["_id"]},
+            {"$set": {
+                "last_score": score,
+                "best_score": best_score,
+                "last_feedback": ai_feedback,
+            }}
         )
-        db.add(result)
-
-    db.commit()
+    else:
+        test_results_col.insert_one({
+            "user_id": user_id_str,
+            "test_id": test_id_str,
+            "best_score": score,
+            "last_score": score,
+            "last_feedback": ai_feedback,
+        })
 
     return {
         "score": score,
         "correct": correct,
         "total": total,
-        "weak_topics": list(set(weak_topics)),  # deduplicate
+        "weak_topics": list(set(weak_topics)),
         "review": review,
         "ai_feedback": ai_feedback
     }
 
 
-# 📘 RESULT — uses stored feedback, no extra AI call
+# 📘 RESULT
 @router.get("/result/{test_id}")
-def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_verified_user)):
+def get_result(test_id: Union[int, str], db = Depends(get_db), user = Depends(get_verified_user)):
+    user_id_str = str(user.id)
+    test_id_str = str(test_id)
 
-    # Get the latest answers only (already deduplicated on submit)
-    answers = db.query(UserAnswer).filter(
-        UserAnswer.user_id == user.id,
-        UserAnswer.test_id == test_id
-    ).all()
+    answers = list(user_answers_col.find({
+        "user_id": user_id_str,
+        "test_id": test_id_str
+    }))
 
     if not answers:
         return None
 
     total = len(answers)
-    correct = sum(1 for a in answers if a.is_correct)
+    correct = sum(1 for a in answers if a.get("is_correct"))
     score = int((correct / total) * 100) if total else 0
 
-    # Deduplicate weak topics
     seen = set()
     weak_topics = []
     for a in answers:
-        if not a.is_correct and a.question_text not in seen:
-            seen.add(a.question_text)
-            weak_topics.append(a.question_text)
+        q_txt = a.get("question_text", "")
+        if not a.get("is_correct") and q_txt not in seen:
+            seen.add(q_txt)
+            weak_topics.append(q_txt)
 
     review = [
         {
-            "question": a.question_text,
-            "your_answer": a.selected_answer,
-            "correct_answer": a.correct_answer,
-            "is_correct": a.is_correct
+            "question": a.get("question_text", ""),
+            "your_answer": a.get("selected_answer"),
+            "correct_answer": a.get("correct_answer", ""),
+            "is_correct": bool(a.get("is_correct")),
         }
         for a in answers
     ]
 
-    # Use stored feedback — NO new AI call
-    result_record = db.query(Test_Result).filter(
-        Test_Result.user_id == user.id,
-        Test_Result.test_id == test_id
-    ).first()
+    result_record = test_results_col.find_one({
+        "user_id": user_id_str,
+        "test_id": test_id_str
+    })
 
     ai_feedback = (
-        result_record.last_feedback
-        if result_record and result_record.last_feedback
+        result_record.get("last_feedback")
+        if result_record and result_record.get("last_feedback")
         else "Complete a test attempt to receive AI feedback."
     )
 
@@ -272,38 +295,43 @@ def get_result(test_id: int, db: Session = Depends(get_db), user=Depends(get_ver
 
 # 🗑️ DELETE TEST
 @router.delete("/{test_id}")
-def delete_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_verified_user)):
-    test = db.query(Test).filter(Test.id == test_id, Test.user_id == user.id).first()
+def delete_test(test_id: Union[int, str], db = Depends(get_db), user = Depends(get_verified_user)):
+    user_id_str = str(user.id)
+    test_id_str = str(test_id)
 
+    flt = {"$and": [id_filter(test_id_str), {"user_id": user_id_str}]}
+    test = tests_col.find_one(flt)
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    db.query(UserAnswer).filter(UserAnswer.test_id == test_id).delete()
-    db.query(Test_Result).filter(Test_Result.test_id == test_id).delete()
-
-    db.delete(test)
-    db.commit()
+    user_answers_col.delete_many({"test_id": test_id_str})
+    test_results_col.delete_many({"test_id": test_id_str})
+    questions_col.delete_many({"test_id": test_id_str})
+    tests_col.delete_one({"_id": test["_id"]})
 
     return {"message": "Test deleted successfully"}
 
 
 # 🧪 GET TEST
 @router.get("/{test_id}")
-def get_test(test_id: int, db: Session = Depends(get_db), user=Depends(get_verified_user)):
-    test = db.query(Test).filter(Test.id == test_id, Test.user_id == user.id).first()
+def get_test(test_id: Union[int, str], db = Depends(get_db), user = Depends(get_verified_user)):
+    user_id_str = str(user.id)
+    test_id_str = str(test_id)
+
+    flt = {"$and": [id_filter(test_id_str), {"user_id": user_id_str}]}
+    test = tests_col.find_one(flt)
     if not test:
         raise HTTPException(status_code=404, detail="Test not found")
 
-    questions = db.query(Question).filter(Question.test_id == test_id).all()
-
+    questions = test.get("questions") or list(questions_col.find({"test_id": test_id_str}))
     if not questions:
-        raise HTTPException(status_code=404, detail="Test not found")
+        raise HTTPException(status_code=404, detail="Test questions not found")
 
     return [
         {
-            "id": q.id,
-            "question": q.question_text,
-            "options": q.options
+            "id": str(q.get("_id") or q.get("id")),
+            "question": q.get("question_text", ""),
+            "options": q.get("options") or []
         }
         for q in questions
     ]

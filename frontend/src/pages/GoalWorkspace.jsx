@@ -184,41 +184,40 @@ function GoalWorkspace() {
     return true;
   });
 
+  const totalWeeks = Object.keys(goal?.weeks || {}).length || 1;
+
   return (
-    <div className="min-h-screen bg-page flex text-text-primary font-sans">
+    <div className="min-h-screen flex flex-col bg-canvas text-[var(--text-primary)] font-sans antialiased">
+      {/* FLOATING TOP NAVIGATION DOCK */}
       <Sidebar />
 
-      {/* WORKSPACE AREA */}
-      <div className="flex-1 h-screen overflow-y-auto p-4 md:p-8 flex flex-col gap-6 animate-fade-in">
-        
-        {/* TOP NAV BAR */}
+      {/* WORKSPACE AREA with generous width */}
+      <main className="w-full max-w-[1560px] mx-auto px-6 md:px-10 pb-20 flex flex-col gap-6 flex-1 animate-fade-in">
+        {/* TOP NAV / BREADCRUMB */}
         <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
             <button
+              type="button"
               onClick={() => navigate("/goals")}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface border border-border text-text-secondary hover:text-text-primary hover:border-accent transition-all text-xs font-semibold"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-[var(--border-subtle)] bg-[var(--bg-surface)] text-[var(--text-secondary)] hover:text-[var(--text-primary)] hover:border-[var(--accent-primary)] transition-all text-xs font-medium cursor-pointer shadow-xs"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3.5 h-3.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-              </svg>
+              <span>←</span>
               <span>Goals Dashboard</span>
             </button>
-            <span className="text-text-tertiary text-xs">/</span>
-            <span className="text-text-tertiary text-xs truncate max-w-[200px] sm:max-w-xs font-medium">
-              {goal?.title || "Goal Workspace"}
+            <span className="text-[var(--text-muted)] text-xs">/</span>
+            <span className="text-[var(--text-secondary)] text-xs font-semibold truncate max-w-[200px] sm:max-w-xs">
+              {goal?.title || "Workspace"}
             </span>
           </div>
 
           {goal && (
             <button
+              type="button"
               onClick={handleDeleteGoal}
-              className="text-text-tertiary hover:text-danger p-2 hover:bg-danger/10 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1.5"
+              className="text-[var(--text-muted)] hover:text-red-500 px-3 py-1.5 rounded-full hover:bg-red-500/10 transition-colors text-xs font-medium flex items-center gap-1.5 cursor-pointer"
               title="Delete Goal"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-              </svg>
-              <span className="hidden sm:inline">Delete Goal</span>
+              <span>Delete Goal</span>
             </button>
           )}
         </div>
@@ -226,21 +225,22 @@ function GoalWorkspace() {
         {/* LOADING STATE */}
         {loading && (
           <div className="flex flex-col gap-6">
-            <div className="h-28 rounded-xl bg-surface border border-border animate-pulse" />
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 h-96 rounded-xl bg-surface border border-border animate-pulse" />
-              <div className="h-96 rounded-xl bg-surface border border-border animate-pulse" />
+            <div className="h-32 rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-card)] animate-pulse" />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-7 xl:col-span-8 h-96 rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-card)] animate-pulse" />
+              <div className="lg:col-span-5 xl:col-span-4 h-96 rounded-[var(--radius-card)] bg-[var(--bg-surface)] border border-[var(--border-card)] animate-pulse" />
             </div>
           </div>
         )}
 
         {/* ERROR STATE */}
         {error && (
-          <div className="p-8 rounded-xl bg-surface border border-danger/30 text-center flex flex-col items-center gap-3">
-            <p className="text-danger font-medium">{error}</p>
+          <div className="auvon-card text-center flex flex-col items-center gap-3">
+            <p className="text-red-500 font-medium">{error}</p>
             <button
+              type="button"
               onClick={() => navigate("/goals")}
-              className="px-4 py-2 rounded-lg bg-control border border-border text-sm font-semibold hover:border-accent"
+              className="auvon-pill-btn-secondary text-xs py-2 px-4 cursor-pointer"
             >
               Return to Goals Dashboard
             </button>
@@ -250,80 +250,60 @@ function GoalWorkspace() {
         {/* WORKSPACE CONTENT */}
         {!loading && !error && goal && (
           <>
-            {/* GOAL BANNER & STATS */}
-            <div className="bg-surface border border-border p-6 rounded-2xl flex flex-col gap-5 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded bg-accent/15 text-accent border border-accent/20">
-                      Goal Workspace
-                    </span>
-                    <span className="text-xs text-text-tertiary">
-                      {Object.keys(goal.weeks || {}).length} Weeks Plan
-                    </span>
-                  </div>
-                  <h1 className="font-serif text-2xl md:text-3xl font-semibold text-text-primary">
-                    {goal.title}
-                  </h1>
+            {/* HERO CARD */}
+            <section className="auvon-card">
+              {/* 1. Top Telemetry Row */}
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="auvon-telemetry-badge">
+                    Active Roadmap
+                  </span>
+                  <span className="text-xs font-semibold text-[var(--text-secondary)]">
+                    Week {activeWeek === "all" ? "1" : activeWeek} of {totalWeeks}
+                  </span>
                 </div>
 
-                {/* PROGRESS BADGE */}
-                <div className="flex items-center gap-3 bg-surface-alt border border-border px-4 py-2.5 rounded-xl self-start md:self-center">
-                  <div className="text-right">
-                    <div className="text-lg font-serif font-semibold text-text-primary">
-                      {percent}%
-                    </div>
-                    <div className="text-[10px] text-text-tertiary font-medium">
-                      {done} of {total} tasks done
-                    </div>
-                  </div>
-                  <div className="w-12 h-12 rounded-full border-2 border-border-default flex items-center justify-center relative">
-                    <svg className="w-12 h-12 -rotate-90">
-                      <circle
-                        cx="24"
-                        cy="24"
-                        r="18"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                        className="text-surface-alt"
-                        fill="transparent"
-                      />
-                      <circle
-                        cx="24"
-                        cy="24"
-                        r="18"
-                        stroke="currentColor"
-                        strokeWidth="3"
-                        className="text-accent transition-all duration-1000 ease-out"
-                        fill="transparent"
-                        strokeDasharray={113}
-                        strokeDashoffset={113 - (113 * percent) / 100}
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </div>
-                </div>
+                <span className="font-mono text-xs font-semibold text-[var(--accent-primary)]">
+                  {percent}% Complete ({done}/{total} steps)
+                </span>
               </div>
 
-              {/* PROGRESS BAR */}
-              <div className="bg-surface-alt h-1.5 rounded-full overflow-hidden border border-border-subtle">
+              {/* 2. Main Goal Title */}
+              <h1 className="font-heading text-3xl md:text-4xl font-bold tracking-tight text-[var(--text-primary)] mt-4 mb-2">
+                {goal.title}
+              </h1>
+
+              {/* 3. Subtitle / Description */}
+              <p className="text-base text-[var(--text-secondary)] max-w-[760px] leading-relaxed">
+                {totalWeeks} Weeks Curriculum • Curated official documentation, interactive labs, and video tutorials automatically matched to each milestone.
+              </p>
+
+              {/* 4. Slim Linear Progress Track */}
+              <div
+                className="w-full my-5 rounded-full overflow-hidden"
+                style={{ height: "8px", backgroundColor: "var(--border-subtle)" }}
+              >
                 <div
-                  className="bg-accent h-full rounded-full transition-all duration-1000 ease-out"
-                  style={{ width: `${percent}%` }}
+                  className="h-full rounded-full transition-all duration-700 ease-out"
+                  style={{
+                    width: `${percent}%`,
+                    backgroundColor: "var(--accent-primary)",
+                  }}
                 />
               </div>
 
-              {/* WEEK TABS SELECTOR */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-1 pt-1 border-t border-border-subtle scrollbar-none">
+              {/* 5. Week Tabs Selector (Pill format) */}
+              <div className="pt-3 border-t border-[var(--border-subtle)] flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
                 <button
+                  type="button"
                   onClick={() => setActiveWeek("all")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all ${
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-mono font-medium whitespace-nowrap transition-all cursor-pointer ${
                     activeWeek === "all"
-                      ? "bg-accent text-white shadow-sm"
-                      : "bg-surface-alt hover:bg-control border border-border text-text-secondary"
+                      ? "bg-[var(--accent-primary)] text-white shadow-xs"
+                      : "bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                   }`}
                 >
-                  All Weeks ({total} Tasks)
+                  All Weeks ({total})
                 </button>
                 {Object.keys(goal.weeks || {}).map((wk) => {
                   const weekTasks = goal.weeks[wk] || [];
@@ -331,94 +311,100 @@ function GoalWorkspace() {
                   return (
                     <button
                       key={wk}
+                      type="button"
                       onClick={() => setActiveWeek(wk)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                      className={`px-3.5 py-1.5 rounded-full text-xs font-mono font-medium whitespace-nowrap transition-all cursor-pointer ${
                         activeWeek === wk
-                          ? "bg-accent text-white shadow-sm"
-                          : "bg-surface-alt hover:bg-control border border-border text-text-secondary"
+                          ? "bg-[var(--accent-primary)] text-white shadow-xs"
+                          : "bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
                       }`}
                     >
-                      <span>Week {wk}</span>
-                      <span className="text-[10px] opacity-75">
-                        ({weekDone}/{weekTasks.length})
-                      </span>
+                      Week {wk} ({weekDone}/{weekTasks.length})
                     </button>
                   );
                 })}
               </div>
-            </div>
+            </section>
 
             {/* TWO-COLUMN LAYOUT: TASKS (LEFT) & RESOURCES (RIGHT) */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-              
-              {/* LEFT COLUMN: WEEKLY LEARNING PLAN (7 cols on lg, 8 on xl) */}
+              {/* LEFT COLUMN: WEEKLY ACTION PLANS */}
               <div className="lg:col-span-7 xl:col-span-8 flex flex-col gap-6">
                 {filteredWeeks().map(([weekNum, steps]) => {
                   const weekDone = steps.filter((s) => s.done).length;
                   const weekPercent = steps.length ? Math.round((weekDone / steps.length) * 100) : 0;
 
                   return (
-                    <div
-                      key={weekNum}
-                      className="bg-surface border border-border rounded-xl p-6 flex flex-col gap-5 shadow-sm"
-                    >
+                    <div key={weekNum} className="auvon-card !p-6 flex flex-col gap-5">
                       {/* WEEK HEADER */}
-                      <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                      <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
                         <div className="flex items-center gap-2.5">
-                          <span className="w-7 h-7 rounded-lg bg-accent/15 text-accent font-semibold text-xs flex items-center justify-center border border-accent/20">
-                            W{weekNum}
+                          <span className="font-mono text-xs font-semibold px-2.5 py-1 rounded-full bg-[var(--accent-soft)] text-[var(--accent-primary)] border border-[var(--accent-border)]">
+                            Week {weekNum}
                           </span>
-                          <h2 className="font-serif text-lg font-medium text-text-primary">
-                            Week {weekNum} Action Plan
+                          <h2 className="font-heading text-lg font-semibold text-[var(--text-primary)]">
+                            Action Plan
                           </h2>
                         </div>
-                        <span className="text-xs text-text-tertiary font-sans font-medium">
-                          <span className={weekPercent === 100 ? "text-success font-semibold" : "text-accent"}>
+                        <span className="font-mono text-xs text-[var(--text-secondary)]">
+                          <span className={weekPercent === 100 ? "text-emerald-600 font-semibold" : "text-[var(--accent-primary)] font-semibold"}>
                             {weekPercent}%
                           </span>{" "}
                           • {weekDone} of {steps.length} done
                         </span>
                       </div>
 
-                      {/* TASKS LIST */}
-                      <div className="space-y-4">
+                      {/* TASKS LIST WITH SECTION 4-C-1 CIRCULAR CHECK BADGES */}
+                      <div className="space-y-3.5">
                         {steps.map((step) => {
                           const hasVideos = step.videos && step.videos.length > 0;
                           return (
                             <div
                               key={step.id}
-                              className={`p-4 rounded-xl border transition-all ${
+                              className={`p-4 rounded-2xl border transition-all ${
                                 step.done
-                                  ? "bg-surface-alt/50 border-border-subtle"
-                                  : "bg-surface-alt border-border hover:border-accent/50"
+                                  ? "bg-[var(--bg-surface-subtle)]/70 border-[var(--border-subtle)]"
+                                  : "bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] hover:border-[var(--accent-border)]"
                               }`}
                             >
                               <div className="flex items-start justify-between gap-3">
-                                <label className="flex items-start gap-3 cursor-pointer group flex-1">
-                                  <input
-                                    type="checkbox"
-                                    checked={Boolean(step.done)}
-                                    onChange={() => toggleStep(step.id)}
-                                    className="mt-1 w-4 h-4 rounded border-border bg-input text-accent focus:ring-accent cursor-pointer flex-shrink-0"
-                                  />
-                                  <div className="flex flex-col gap-1">
-                                    <span
-                                      className={`text-sm font-sans leading-relaxed transition-all ${
-                                        step.done
-                                          ? "line-through text-text-tertiary"
-                                          : "text-text-primary group-hover:text-accent font-medium"
-                                      }`}
-                                    >
-                                      {step.text}
-                                    </span>
-                                  </div>
-                                </label>
+                                <div className="flex items-start gap-3 flex-1">
+                                  {/* Custom Circular Checkbox per Section 4-C-1 */}
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleStep(step.id)}
+                                    className={`mt-0.5 w-5 h-5 rounded-full flex items-center justify-center transition-all duration-200 flex-shrink-0 cursor-pointer ${
+                                      step.done
+                                        ? "bg-[var(--accent-primary)] text-white shadow-xs"
+                                        : "border-[1.5px] border-[var(--border-subtle)] hover:border-[var(--accent-primary)] bg-[var(--bg-surface)]"
+                                    }`}
+                                    aria-label={step.done ? "Mark incomplete" : "Mark complete"}
+                                  >
+                                    {step.done && (
+                                      <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5">
+                                        <path d="M2.5 6L5 8.5L9.5 3.5" />
+                                      </svg>
+                                    )}
+                                  </button>
 
-                                {/* REFRESH / FIND RESOURCES BUTTON */}
+                                  <span
+                                    onClick={() => toggleStep(step.id)}
+                                    className={`text-sm leading-relaxed transition-all cursor-pointer ${
+                                      step.done
+                                        ? "line-through text-[var(--text-muted)]"
+                                        : "text-[var(--text-primary)] font-medium hover:text-[var(--accent-primary)]"
+                                    }`}
+                                  >
+                                    {step.text}
+                                  </span>
+                                </div>
+
+                                {/* Refresh Resources Button */}
                                 <button
+                                  type="button"
                                   onClick={(e) => refreshStepResources(step.id, e)}
                                   disabled={refreshingStepId === step.id}
-                                  className="text-text-tertiary hover:text-accent p-1.5 rounded hover:bg-accent/10 transition-colors flex-shrink-0 text-xs flex items-center gap-1"
+                                  className="text-[var(--text-muted)] hover:text-[var(--accent-primary)] p-1.5 rounded-full hover:bg-[var(--accent-soft)] transition-colors text-xs flex items-center gap-1 cursor-pointer flex-shrink-0"
                                   title="Find / Refresh Video Resources"
                                 >
                                   <svg
@@ -427,19 +413,19 @@ function GoalWorkspace() {
                                     viewBox="0 0 24 24"
                                     strokeWidth={1.5}
                                     stroke="currentColor"
-                                    className={`w-4 h-4 ${refreshingStepId === step.id ? "animate-spin text-accent" : ""}`}
+                                    className={`w-3.5 h-3.5 ${refreshingStepId === step.id ? "animate-spin text-[var(--accent-primary)]" : ""}`}
                                   >
                                     <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                                   </svg>
-                                  <span className="hidden sm:inline text-[10px]">
+                                  <span className="font-mono text-[10px] hidden sm:inline">
                                     {hasVideos ? "Refresh" : "+ Video"}
                                   </span>
                                 </button>
                               </div>
 
-                              {/* INLINE VIDEO CARD IF ATTACHED */}
+                              {/* INLINE RESOURCES */}
                               {hasVideos && (
-                                <div className="mt-3 pt-3 border-t border-border-subtle/80 flex flex-col gap-2">
+                                <div className="mt-3 pt-3 border-t border-[var(--border-subtle)] flex flex-col gap-2">
                                   {step.videos.map((vid, vIdx) => (
                                     <VideoCard
                                       key={vid.id || vid.video_id || `task-vid-${vIdx}`}
@@ -462,29 +448,27 @@ function GoalWorkspace() {
                 })}
               </div>
 
-              {/* RIGHT COLUMN: DEDICATED RESOURCES PANEL (5 cols on lg, 4 on xl) */}
+              {/* RIGHT COLUMN: DEDICATED RESOURCES PANEL */}
               <div className="lg:col-span-5 xl:col-span-4 sticky top-6 flex flex-col gap-4">
-                <div className="bg-surface border border-border p-5 rounded-2xl flex flex-col gap-4 shadow-sm">
-                  
-                  {/* PANEL HEADER */}
-                  <div className="flex items-center justify-between pb-3 border-b border-border-subtle">
+                <div className="auvon-card !p-5 flex flex-col gap-4">
+                  {/* Panel Header */}
+                  <div className="flex items-center justify-between pb-3 border-b border-[var(--border-subtle)]">
                     <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-accent/15 text-accent flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4">
-                          <path d="M4.5 4.5a3 3 0 00-3 3v9a3 3 0 003 3h8.25a3 3 0 003-3v-9a3 3 0 00-3-3H4.5zM19.94 18.75l-2.69-2.69V7.94l2.69-2.69c.944-.945 2.56-.276 2.56 1.06v11.38c0 1.336-1.616 2.005-2.56 1.06z" />
-                        </svg>
+                      <div className="w-7 h-7 rounded-full bg-[var(--accent-soft)] text-[var(--accent-primary)] flex items-center justify-center font-bold text-xs">
+                        ✦
                       </div>
-                      <h3 className="font-serif text-base font-semibold text-text-primary">
-                        Learning Resources
+                      <h3 className="font-heading text-base font-semibold text-[var(--text-primary)]">
+                        Curated Resources
                       </h3>
                     </div>
 
                     <div className="flex items-center gap-2">
                       <button
+                        type="button"
                         onClick={refreshAllResources}
                         disabled={refreshingAll}
                         title="Refresh All Learning Resources"
-                        className="px-2 py-1 rounded bg-surface-alt hover:bg-accent/15 border border-border text-text-secondary hover:text-accent transition-colors text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        className="px-2.5 py-1 rounded-full bg-[var(--bg-surface-subtle)] hover:bg-[var(--accent-soft)] border border-[var(--border-subtle)] text-[var(--text-secondary)] hover:text-[var(--accent-primary)] transition-colors text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
@@ -492,58 +476,62 @@ function GoalWorkspace() {
                           viewBox="0 0 24 24"
                           strokeWidth={1.5}
                           stroke="currentColor"
-                          className={`w-3.5 h-3.5 ${refreshingAll ? "animate-spin text-accent" : ""}`}
+                          className={`w-3.5 h-3.5 ${refreshingAll ? "animate-spin text-[var(--accent-primary)]" : ""}`}
                         >
                           <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
                         </svg>
-                        <span className="text-[10px] font-medium hidden sm:inline">
+                        <span className="font-mono text-[10px] font-medium hidden sm:inline">
                           {refreshingAll ? "Refreshing..." : "Refresh"}
                         </span>
                       </button>
 
-                      <span className="text-[10px] font-semibold uppercase px-2 py-1 rounded bg-surface-alt border border-border text-text-tertiary">
+                      <span className="font-mono text-[10px] font-semibold uppercase px-2.5 py-0.5 rounded-full bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-muted)]">
                         {filteredResources.length} items
                       </span>
                     </div>
                   </div>
 
-                  <p className="text-xs text-text-secondary leading-relaxed">
-                    Curated official documentation, interactive labs, tools, and video tutorials automatically matched to this goal's milestones.
+                  <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
+                    Official documentation, interactive labs, and video tutorials aligned with this roadmap.
                   </p>
 
-                  {/* RESOURCE TYPE TABS */}
-                  <div className="grid grid-cols-4 gap-1 p-1 rounded-lg bg-surface-alt border border-border-subtle text-[11px]">
+                  {/* Filter Pills */}
+                  <div className="grid grid-cols-4 gap-1 p-1 rounded-full bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[11px] font-mono">
                     <button
+                      type="button"
                       onClick={() => setResourceFilter("all")}
-                      className={`py-1 px-1 font-semibold rounded-md transition-all truncate text-center ${
-                        resourceFilter === "all" ? "bg-control text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-primary"
+                      className={`py-1 px-1 font-semibold rounded-full transition-all truncate text-center cursor-pointer ${
+                        resourceFilter === "all" ? "bg-[var(--accent-primary)] text-white shadow-xs" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                       }`}
                       title={`All Resources (${allVideos.length})`}
                     >
                       All ({allVideos.length})
                     </button>
                     <button
+                      type="button"
                       onClick={() => setResourceFilter("doc")}
-                      className={`py-1 px-1 font-semibold rounded-md transition-all truncate text-center ${
-                        resourceFilter === "doc" ? "bg-control text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-primary"
+                      className={`py-1 px-1 font-semibold rounded-full transition-all truncate text-center cursor-pointer ${
+                        resourceFilter === "doc" ? "bg-[var(--accent-primary)] text-white shadow-xs" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                       }`}
                       title={`Documentation (${docs.length})`}
                     >
                       Docs ({docs.length})
                     </button>
                     <button
+                      type="button"
                       onClick={() => setResourceFilter("lab")}
-                      className={`py-1 px-1 font-semibold rounded-md transition-all truncate text-center ${
-                        resourceFilter === "lab" ? "bg-control text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-primary"
+                      className={`py-1 px-1 font-semibold rounded-full transition-all truncate text-center cursor-pointer ${
+                        resourceFilter === "lab" ? "bg-[var(--accent-primary)] text-white shadow-xs" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                       }`}
-                      title={`Interactive Labs & Repos (${labs.length})`}
+                      title={`Interactive Labs (${labs.length})`}
                     >
                       Labs ({labs.length})
                     </button>
                     <button
+                      type="button"
                       onClick={() => setResourceFilter("video")}
-                      className={`py-1 px-1 font-semibold rounded-md transition-all truncate text-center ${
-                        resourceFilter === "video" ? "bg-control text-text-primary shadow-sm" : "text-text-tertiary hover:text-text-primary"
+                      className={`py-1 px-1 font-semibold rounded-full transition-all truncate text-center cursor-pointer ${
+                        resourceFilter === "video" ? "bg-[var(--accent-primary)] text-white shadow-xs" : "text-[var(--text-muted)] hover:text-[var(--text-primary)]"
                       }`}
                       title={`Video Lessons (${verifiedVideos.length})`}
                     >
@@ -551,7 +539,7 @@ function GoalWorkspace() {
                     </button>
                   </div>
 
-                  {/* RESOURCES LIST */}
+                  {/* Resources List */}
                   <div className="flex flex-col gap-3 max-h-[calc(100vh-320px)] overflow-y-auto pr-1">
                     {filteredResources.map((vid, idx) => (
                       <div key={vid.id || vid.video_id || `panel-vid-${idx}`} className="flex flex-col gap-1">
@@ -564,7 +552,7 @@ function GoalWorkspace() {
                           compact={false}
                         />
                         {vid.taskText && (
-                          <span className="text-[10px] text-text-tertiary truncate pl-1">
+                          <span className="font-mono text-[10px] text-[var(--text-muted)] truncate pl-1">
                             Associated: {vid.taskText}
                           </span>
                         )}
@@ -572,11 +560,8 @@ function GoalWorkspace() {
                     ))}
 
                     {filteredResources.length === 0 && (
-                      <div className="text-center py-12 border border-dashed border-border rounded-xl flex flex-col items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-text-tertiary">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
-                        </svg>
-                        <p className="text-xs text-text-tertiary">
+                      <div className="text-center py-10 border border-dashed border-[var(--border-subtle)] rounded-xl flex flex-col items-center gap-2">
+                        <p className="text-xs text-[var(--text-muted)]">
                           No resources found for this filter.
                         </p>
                       </div>
@@ -587,9 +572,10 @@ function GoalWorkspace() {
             </div>
           </>
         )}
-      </div>
+      </main>
     </div>
   );
 }
 
 export default GoalWorkspace;
+

@@ -1,100 +1,91 @@
 """
-LLM-as-judge evaluator using Gemini (primary) with OpenAI fallback.
-Evaluates RAG responses for faithfulness and relevance.
-No RAGAS dependency — direct LLM scoring is faster and cheaper.
+RAG Evaluator Service — evaluates generated answers for:
+  1. Faithfulness — is the answer strictly derived from context, without hallucination?
+  2. Answer Relevance — does the answer directly address the student's question?
+
+Evaluations run asynchronously as FastAPI background tasks so user latency is unaffected.
+Scores (0.0 to 1.0) and feedback are stored in the AILog collection for inspection.
 """
 
-import os
 import json
-import logging
-import time
-import requests
+from app.core.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+EVAL_SYSTEM_PROMPT = """You are an impartial, expert AI evaluation judge assessing a RAG (Retrieval-Augmented Generation) system.
 
+You will be given:
+1. CONTEXT: The retrieved document excerpts provided to the generator.
+2. QUESTION: The student's query.
+3. ANSWER: The generated response.
 
-def _load_gemini_keys() -> list[str]:
-    keys = []
-    for i in range(1, 20):
-        k = os.getenv(f"GEMINI_API_KEY_{i}")
-        if k:
-            keys.append(k.strip())
-    if not keys:
-        single = os.getenv("GEMINI_API_KEY")
-        if single:
-            keys.append(single.strip())
-    return keys
+Evaluate the answer on two metrics (0.0 to 1.0):
 
+1. FAITHFULNESS (0.0 to 1.0):
+   - 1.0 = Every single claim, definition, and statement in the answer is directly supported by the CONTEXT. No outside knowledge used.
+   - 0.5 = Mostly faithful, but includes minor unsupported extrapolations or ungrounded details.
+   - 0.0 = Hallucinated, contradicts context, or uses significant outside knowledge not in context.
+   - If the answer correctly states that information is not in the excerpts, score 1.0.
 
-def _call_judge_gemini(messages: list[dict]) -> str | None:
-    """Try all Gemini keys for the judge call. Returns content or None."""
-    keys = _load_gemini_keys()
-    for key in keys:
-        try:
-            resp = requests.post(
-                GEMINI_BASE_URL,
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": "gemini-3.5-flash", "messages": messages},
-                timeout=60,
-            )
-            if resp.status_code == 200:
-                return resp.json()["choices"][0]["message"]["content"]
-            logger.warning(f"Gemini judge key ...{key[-4:]} failed: {resp.status_code}")
-        except Exception as e:
-            logger.warning(f"Gemini judge error: {e}")
-    return None
+2. RELEVANCE (0.0 to 1.0):
+   - 1.0 = The answer directly, completely, and concisely addresses the user's question.
+   - 0.5 = Partially addresses the question, or includes excessive irrelevant fluff.
+   - 0.0 = Irrelevant or evades the question entirely.
 
-
-def _call_judge_openai(messages: list[dict]) -> str | None:
-    """Fallback: OpenAI GPT-4o-mini via direct API."""
-    api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
-        return None
-    try:
-        resp = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": "gpt-4o-mini", "messages": messages, "temperature": 0},
-            timeout=60,
-        )
-        if resp.status_code == 200:
-            return resp.json()["choices"][0]["message"]["content"]
-        logger.warning(f"OpenAI judge failed: {resp.status_code} — {resp.text[:200]}")
-    except Exception as e:
-        logger.warning(f"OpenAI judge error: {e}")
-    return None
+Output ONLY valid JSON in this exact structure:
+{
+  "faithfulness": 0.95,
+  "relevance": 1.0,
+  "reasoning": "Brief 1-2 sentence explanation of your scoring."
+}
+"""
 
 
 def _judge(messages: list[dict]) -> str | None:
-    """Try Gemini first, fall back to OpenAI."""
-    result = _call_judge_gemini(messages)
-    if result:
-        return result
-    logger.info("Gemini judge unavailable, trying OpenAI fallback...")
-    return _call_judge_openai(messages)
+    """Run evaluation prompt through Gemini first, OpenAI fallback."""
+    from app.services.ai import llm_router
 
+    # Try Gemini judge (preferred — fast and cheap)
+    try:
+        from google import genai
+        import os
 
-EVAL_SYSTEM_PROMPT = """You are a strict RAG quality evaluator. Given a context, question, and answer,
-score two dimensions on a 0.0–1.0 scale:
+        key = os.getenv("GEMINI_API_KEY_1") or os.getenv("GEMINI_API_KEY_2")
+        if key:
+            client = genai.Client(api_key=key)
+            prompt = f"{messages[0]['content']}\n\n{messages[1]['content']}"
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=prompt,
+            )
+            if resp.text:
+                return resp.text.strip()
+    except Exception as e:
+        logger.warning(f"Gemini judge failed: {e}, falling back to OpenAI")
 
-FAITHFULNESS: Does every factual claim in the answer appear in the provided context?
-  1.0 = all facts grounded in context
-  0.5 = mostly grounded, minor hallucinations
-  0.0 = answer contradicts or ignores context
+    # Fallback: OpenAI
+    try:
+        import os
+        from openai import OpenAI
 
-RELEVANCE: Does the answer directly address what the user asked?
-  1.0 = fully answers the question
-  0.5 = partially answers
-  0.0 = off-topic or empty
+        key = os.getenv("OPENAI_API_KEY")
+        if key:
+            client = OpenAI(api_key=key)
+            resp = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                temperature=0.0,
+                max_tokens=300,
+            )
+            return resp.choices[0].message.content.strip()
+    except Exception as e:
+        logger.warning(f"OpenAI judge failed: {e}")
 
-Respond ONLY with valid JSON, no markdown:
-{"faithfulness": 0.0, "relevance": 0.0, "reasoning": "one sentence"}"""
+    return None
 
 
 def evaluate_response_task(
-    log_id: int,
+    log_id: str,
     context: str,
     query: str,
     response: str,
@@ -103,9 +94,6 @@ def evaluate_response_task(
     Background task: evaluate a RAG response and save scores to AILog.
     Uses Gemini-as-judge with OpenAI fallback.
     """
-    from app.database import SessionLocal
-    from app.models.ai_log import AILog
-
     if not query or not response:
         logger.info(f"Skipping evaluation for log {log_id}: empty query or response")
         return
@@ -154,17 +142,19 @@ def evaluate_response_task(
         relevance = 0.0
         feedback = f"Evaluation parse failed: {e}"
 
-    # Write to DB
-    db = SessionLocal()
+    # Write to MongoDB
     try:
-        record = db.query(AILog).filter(AILog.id == log_id).first()
-        if record:
-            record.faithfulness = faithfulness
-            record.relevance = relevance
-            record.evaluation_feedback = feedback
-            db.commit()
-            logger.info(f"Evaluation saved for log {log_id}")
+        from app.database import ai_logs_col, to_object_id
+        obj_id = to_object_id(log_id)
+        flt = {"_id": obj_id} if obj_id else {"id": str(log_id)}
+        ai_logs_col.update_one(
+            flt,
+            {"$set": {
+                "faithfulness": faithfulness,
+                "relevance": relevance,
+                "evaluation_feedback": feedback,
+            }}
+        )
+        logger.info(f"Evaluation saved for log {log_id}")
     except Exception as e:
         logger.error(f"DB write failed for log {log_id}: {e}")
-    finally:
-        db.close()

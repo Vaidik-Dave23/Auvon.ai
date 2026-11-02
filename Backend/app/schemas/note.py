@@ -1,13 +1,17 @@
 from pydantic import BaseModel
+from typing import Union, Optional
+
 
 class NoteCreate(BaseModel):
     topic: str
 
+
 class NoteResponse(BaseModel):
-    id: int
+    id: Union[int, str]
     title: str
     content: str
-    topic: str
+    topic: Optional[str] = None
+    created_at: Optional[str] = None
 
     class Config:
-        from_attributes = True   
+        from_attributes = True

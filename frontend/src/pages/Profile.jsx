@@ -4,12 +4,12 @@ import { useTheme } from "../context/ThemeContext";
 import api from "../api/axios";
 
 function Profile() {
-  const { theme, toggleTheme } = useTheme();
-  
+  const { theme, setTheme } = useTheme();
+
   const [user, setUser] = useState({
     name: "",
     email: "",
-    created_at: null
+    created_at: null,
   });
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
@@ -55,66 +55,70 @@ function Profile() {
   const formatJoinDate = (dateString) => {
     if (!dateString) return "Unknown";
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long'
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "long",
     });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-page flex text-text-primary font-sans">
+      <div className="min-h-screen bg-[var(--bg-canvas)] flex text-[var(--text-primary)] font-sans">
         <Sidebar />
         <div className="flex-1 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-accent"></div>
+          <div className="w-8 h-8 border-3 border-[var(--accent-primary)]/20 border-t-[var(--accent-primary)] rounded-full animate-spin" />
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-page flex text-text-primary font-sans">
+    <div className="min-h-screen bg-[var(--bg-canvas)] text-[var(--text-primary)] flex flex-col font-sans transition-colors duration-250">
       <Sidebar />
 
-      {/* MAIN CONTENT AREA */}
-      <div className="flex-1 h-screen overflow-y-auto p-8 flex flex-col gap-8 animate-fade-in">
+      {/* Main Centered Container */}
+      <main className="w-full max-w-[1100px] mx-auto px-6 pb-20 flex flex-col gap-8 flex-1 animate-fade-in">
         <header className="flex flex-col gap-1">
-          <h1 className="font-serif text-3xl font-semibold text-text-primary">
+          <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-[var(--text-primary)] font-heading">
             Profile & Settings
           </h1>
-          <p className="text-text-secondary text-sm">
-            Manage your account and app preferences.
+          <p className="text-sm text-[var(--text-secondary)]">
+            Manage your personal learning profile and active design system.
           </p>
         </header>
 
-        <div className="max-w-2xl w-full flex flex-col gap-8">
-          
+        <div className="flex flex-col gap-8">
           {/* PROFILE SECTION */}
-          <div className="bg-surface border border-border p-6 rounded-xl flex flex-col gap-6">
-            <div className="flex justify-between items-center pb-4 border-b border-border-subtle">
-              <h2 className="font-serif text-xl font-medium text-text-primary">
-                Personal Details
-              </h2>
+          <div className="auvon-card flex flex-col gap-6">
+            <div className="flex justify-between items-center pb-4 border-b border-[var(--border-subtle)]">
+              <div>
+                <h2 className="text-lg font-bold font-heading text-[var(--text-primary)]">
+                  Personal Details
+                </h2>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                  Update your identity details and account contact.
+                </p>
+              </div>
 
               {!isEditing ? (
-                <button 
+                <button
                   onClick={() => setIsEditing(true)}
-                  className="px-4 py-2 border border-border text-text-secondary rounded-lg text-sm font-semibold hover:text-text-primary hover:bg-surface-alt transition-colors focus:outline-none"
+                  className="auvon-pill-btn-secondary text-xs py-2 px-4 cursor-pointer"
                 >
                   Edit Profile
                 </button>
               ) : (
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={handleCancel}
-                    className="px-4 py-2 border border-border text-text-secondary rounded-lg text-sm font-semibold hover:text-text-primary hover:bg-surface-alt transition-colors focus:outline-none"
+                    className="auvon-pill-btn-secondary text-xs py-2 px-3.5 cursor-pointer"
                   >
                     Cancel
                   </button>
-                  <button 
+                  <button
                     onClick={handleSave}
                     disabled={saving}
-                    className="px-4 py-2 bg-control text-text-primary border border-border rounded-lg text-sm font-semibold hover:bg-black transition-colors focus:outline-none disabled:opacity-50"
+                    className="auvon-pill-btn-primary text-xs py-2 px-4 cursor-pointer disabled:opacity-50"
                   >
                     {saving ? "Saving..." : "Save Changes"}
                   </button>
@@ -122,92 +126,135 @@ function Profile() {
               )}
             </div>
 
-            <div className="space-y-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+            <div className="grid grid-cols-1 gap-5">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
                   Full Name
                 </label>
                 {isEditing ? (
-                  <input 
-                    type="text" 
-                    value={editForm.name} 
-                    onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                    className="w-full bg-input border border-border p-3 rounded-lg text-text-primary focus:outline-none focus:border-accent text-sm font-sans"
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-xl text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all font-sans"
                   />
                 ) : (
-                  <p className="text-sm font-medium text-text-primary">{user.name}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{user.name}</p>
                 )}
               </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
                   Email Address
                 </label>
                 {isEditing ? (
-                  <input 
-                    type="email" 
-                    value={editForm.email} 
-                    onChange={(e) => setEditForm({...editForm, email: e.target.value})}
-                    className="w-full bg-input border border-border p-3 rounded-lg text-text-primary focus:outline-none focus:border-accent text-sm font-sans"
+                  <input
+                    type="email"
+                    value={editForm.email}
+                    onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                    className="w-full bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] px-4 py-2.5 rounded-xl text-sm text-[var(--text-primary)] focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all font-sans"
                   />
                 ) : (
-                  <p className="text-sm font-medium text-text-primary">{user.email}</p>
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{user.email}</p>
                 )}
               </div>
 
               {!isEditing && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
                     Member Since
                   </label>
-                  <p className="text-sm font-medium text-text-secondary">{formatJoinDate(user.created_at)}</p>
+                  <p className="text-sm font-mono text-[var(--text-secondary)]">
+                    {formatJoinDate(user.created_at)}
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* APPEARANCE / SETTINGS SECTION */}
-          <div className="bg-surface border border-border p-6 rounded-xl flex flex-col gap-6">
-            <h2 className="font-serif text-xl font-medium text-text-primary pb-4 border-b border-border-subtle">
-              Appearance
-            </h2>
+          {/* APPEARANCE / DUAL-THEME ARCHITECTURE */}
+          <div className="auvon-card flex flex-col gap-6">
+            <div className="pb-4 border-b border-[var(--border-subtle)]">
+              <h2 className="text-lg font-bold font-heading text-[var(--text-primary)]">
+                Dual-Theme Architecture
+              </h2>
+              <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+                Select between Soho Sanctuary and Alpine Glasshouse daylight design systems.
+              </p>
+            </div>
 
-            <div className="flex flex-col gap-4">
-              <label className="text-xs font-semibold text-text-tertiary uppercase tracking-wider">
-                Theme Mode
-              </label>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Theme Options */}
-                {[
-                  { id: 'dark', name: 'Premium Dark', color: '#181716' },
-                  { id: 'ocean', name: 'Deep Ocean', color: '#080E24' },
-                  { id: 'light', name: 'Clean Light', color: '#F8FAF4' }
-                ].map((t) => (
-                  <div 
-                    key={t.id}
-                    onClick={() => toggleTheme(t.id)}
-                    className={`cursor-pointer rounded-lg p-4 flex flex-col items-center gap-3 transition-all duration-300 border-2 ${
-                      theme === t.id 
-                        ? "border-accent bg-surface-alt ring-1 ring-accent" 
-                        : "border-border-subtle hover:border-text-tertiary bg-surface-alt"
-                    }`}
-                  >
-                    <div 
-                      className="w-10 h-10 rounded-full border border-border" 
-                      style={{ backgroundColor: t.color }} 
-                    />
-                    <span className={`text-sm font-medium ${theme === t.id ? "text-text-primary" : "text-text-tertiary"}`}>
-                      {t.name}
-                    </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Soho Sanctuary Option */}
+              <div
+                onClick={() => setTheme("soho")}
+                className={`cursor-pointer rounded-2xl p-5 flex flex-col gap-4 border-2 transition-all select-none ${
+                  theme === "soho"
+                    ? "border-[#0052FF] bg-[#EBF1FF]/40 shadow-sm"
+                    : "border-[var(--border-subtle)] hover:border-[var(--border-card)] bg-[var(--bg-surface-subtle)]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-[#0052FF] flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                      a
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#0F172A] font-heading">
+                        Soho Sanctuary
+                      </h3>
+                      <p className="text-[11px] text-[#475569]">
+                        Default • Sunlit Alabaster
+                      </p>
+                    </div>
                   </div>
-                ))}
+                  {theme === "soho" && (
+                    <span className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-full bg-[#0052FF] text-white">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[#475569] leading-relaxed">
+                  Sunlit gallery porcelain inspired by Craft.do, Amie, and Things 3. Pure white high-radius cards with electric Cobalt focus.
+                </p>
+              </div>
+
+              {/* Alpine Glasshouse Option */}
+              <div
+                onClick={() => setTheme("alpine")}
+                className={`cursor-pointer rounded-2xl p-5 flex flex-col gap-4 border-2 transition-all select-none ${
+                  theme === "alpine"
+                    ? "border-[#2E7D52] bg-[#E3EFE8]/50 shadow-sm"
+                    : "border-[var(--border-subtle)] hover:border-[var(--border-card)] bg-[var(--bg-surface-subtle)]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-[#2E7D52] flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                      ✦
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-[#0F211C] font-heading">
+                        Alpine Glasshouse
+                      </h3>
+                      <p className="text-[11px] text-[#3D524B]">
+                        Biophilic Swiss Glasshouse
+                      </p>
+                    </div>
+                  </div>
+                  {theme === "alpine" && (
+                    <span className="text-[11px] font-mono font-semibold px-2.5 py-1 rounded-full bg-[#2E7D52] text-white">
+                      Active
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[#3D524B] leading-relaxed">
+                  Biophilic Swiss retreat inspired by Therme Vals & Vitra Campus. Translucent frosted quartz with Deep Spruce & Meadow Chartreuse.
+                </p>
               </div>
             </div>
           </div>
-
         </div>
-      </div>
+      </main>
     </div>
   );
 }
