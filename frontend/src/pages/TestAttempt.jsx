@@ -69,7 +69,7 @@ function TestAttempt() {
     setSubmitting(true);
     try {
       const res = await api.post("/tests/submit", {
-        test_id: Number(id),
+        test_id: id,
         answers: answers,
       });
 
@@ -132,9 +132,8 @@ function TestAttempt() {
               return (
                 <div
                   key={q.id}
-                  className={`auvon-card transition-all ${
-                    hasValidationError ? "border-red-400 ring-2 ring-red-100" : ""
-                  }`}
+                  className={`auvon-card transition-all ${hasValidationError ? "border-red-400 ring-2 ring-red-100" : ""
+                    }`}
                 >
                   {/* Calm Question Progress Indicator (Section 4-C-4) */}
                   <div className="flex items-center justify-between mb-3">
@@ -163,27 +162,24 @@ function TestAttempt() {
                         <div
                           key={idx}
                           onClick={() => handleSelect(q.id, opt)}
-                          className={`flex items-center gap-4 px-5 py-4 rounded-[14px] cursor-pointer border transition-all duration-200 select-none ${
-                            isSelected
+                          className={`flex items-center gap-4 px-5 py-4 rounded-[14px] cursor-pointer border transition-all duration-200 select-none ${isSelected
                               ? "bg-[var(--accent-soft)] border-[var(--accent-primary)] shadow-sm"
                               : "bg-[var(--bg-surface-subtle)] border-[var(--border-subtle)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-soft)]/30"
-                          }`}
+                            }`}
                         >
                           <div
-                            className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all flex-shrink-0 ${
-                              isSelected
+                            className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all flex-shrink-0 ${isSelected
                                 ? "border-[var(--accent-primary)] bg-[var(--accent-primary)] text-white"
                                 : "border-[var(--border-subtle)] bg-[var(--bg-surface)]"
-                            }`}
+                              }`}
                           >
                             {isSelected && (
                               <div className="w-2 h-2 rounded-full bg-white" />
                             )}
                           </div>
                           <span
-                            className={`text-sm font-medium leading-relaxed transition-colors ${
-                              isSelected ? "text-[var(--text-primary)] font-semibold" : "text-[var(--text-secondary)]"
-                            }`}
+                            className={`text-sm font-medium leading-relaxed transition-colors ${isSelected ? "text-[var(--text-primary)] font-semibold" : "text-[var(--text-secondary)]"
+                              }`}
                           >
                             {opt}
                           </span>
