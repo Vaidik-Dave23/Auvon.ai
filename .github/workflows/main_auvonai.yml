@@ -14,7 +14,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read # Required for actions/checkout
+      contents: read # This is required for actions/checkout
 
     steps:
       - uses: actions/checkout@v4
@@ -76,3 +76,4 @@ jobs:
           app-name: 'AuvonAI'
           slot-name: 'Production'
           startup-command: 'python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir Backend'
+
