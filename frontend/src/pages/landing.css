@@ -1,0 +1,131 @@
+/* ==========================================================================
+   Auvon landing — motion layer
+   Uses the existing theme tokens only (Soho + Alpine both work).
+   ========================================================================== */
+
+.lp { --ease-out: cubic-bezier(0.16, 1, 0.3, 1); overflow-x: clip; }
+
+/* ---------- scroll progress + nav ---------- */
+.lp-progress {
+  position: fixed; inset: 0 0 auto 0; height: 2px; z-index: 60;
+  background: var(--accent-primary);
+  transform-origin: 0 50%; transform: scaleX(var(--lp-scroll, 0));
+}
+.lp-nav-wrap { position: sticky; top: 0; z-index: 50; padding: 14px 16px 0; }
+.lp-nav {
+  max-width: 1180px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px 10px 18px; border-radius: var(--radius-nav);
+  border: 1px solid transparent; transition: all 400ms var(--ease-out);
+}
+.lp-nav.is-scrolled {
+  max-width: 980px; background: var(--bg-nav);
+  backdrop-filter: var(--surface-backdrop); -webkit-backdrop-filter: var(--surface-backdrop);
+  border-color: var(--border-card); box-shadow: var(--shadow-nav);
+}
+.lp-navlink { position: relative; font-size: 13px; font-weight: 600; color: var(--text-secondary); transition: color 200ms; cursor: pointer; background: none; border: 0; }
+.lp-navlink:hover { color: var(--text-primary); }
+.lp-navlink::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 1.5px; background: var(--accent-primary);
+  transform: scaleX(0); transform-origin: left; transition: transform 300ms var(--ease-out);
+}
+.lp-navlink:hover::after, .lp-navlink.is-active::after { transform: scaleX(1); }
+.lp-navlink.is-active { color: var(--text-primary); }
+
+/* ---------- hero ---------- */
+.lp-line { display: block; overflow: hidden; padding-bottom: 0.08em; }
+.lp-line > span {
+  display: inline-block; transform: translateY(105%);
+  animation: lp-rise 1s var(--ease-out) forwards; animation-delay: var(--d, 0ms);
+}
+@keyframes lp-rise { to { transform: translateY(0); } }
+.lp-fade { opacity: 0; transform: translateY(14px); animation: lp-fadeup 0.9s var(--ease-out) forwards; animation-delay: var(--d, 0ms); }
+@keyframes lp-fadeup { to { opacity: 1; transform: none; } }
+
+.lp-serif { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: -0.01em; }
+
+.lp-stage { perspective: 1400px; }
+.lp-shot {
+  --p: 0;
+  transform-origin: 50% 0%;
+  transform: rotateX(calc((1 - var(--p)) * 20deg)) scale(calc(0.9 + var(--p) * 0.1)) translateY(calc((1 - var(--p)) * 30px));
+  will-change: transform;
+}
+
+/* ---------- reveal on scroll ---------- */
+[data-reveal] { opacity: 0; transform: translateY(26px); transition: opacity 900ms var(--ease-out), transform 900ms var(--ease-out); transition-delay: var(--d, 0ms); }
+[data-reveal].is-in { opacity: 1; transform: none; }
+
+/* ---------- marquee ---------- */
+.lp-marquee { mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+.lp-marquee-track { display: flex; width: max-content; gap: 44px; animation: lp-marquee 48s linear infinite; }
+.lp-marquee:hover .lp-marquee-track { animation-play-state: paused; }
+@keyframes lp-marquee { to { transform: translateX(-50%); } }
+.lp-topic { font-family: var(--font-serif); font-style: italic; font-size: clamp(22px, 3vw, 34px); color: var(--text-muted); white-space: nowrap; transition: color 250ms; }
+.lp-topic:hover { color: var(--accent-primary); }
+.lp-topic-dot { color: var(--accent-primary); font-size: 14px; align-self: center; }
+
+/* ---------- sticky "how it works" ---------- */
+.lp-step { min-height: 72vh; display: flex; flex-direction: column; justify-content: center; opacity: 0.32; transition: opacity 500ms var(--ease-out); }
+.lp-step.is-active { opacity: 1; }
+.lp-step-num { font-family: var(--font-mono); font-size: 12px; color: var(--accent-primary); letter-spacing: 0.08em; }
+.lp-rail { position: absolute; left: 0; top: 0; bottom: 0; width: 1.5px; background: var(--border-subtle); }
+.lp-rail-fill { position: absolute; left: 0; top: 0; width: 100%; background: var(--accent-primary); height: calc(var(--rail, 0) * 100%); transition: height 120ms linear; }
+
+.lp-sticky { position: sticky; top: 14vh; height: 72vh; display: flex; align-items: center; }
+.lp-scene { position: absolute; inset: 0; opacity: 0; transform: translateY(18px) scale(0.98); transition: opacity 600ms var(--ease-out), transform 600ms var(--ease-out); pointer-events: none; }
+.lp-scene.is-on { opacity: 1; transform: none; }
+
+/* scene 1: note lines draw in */
+.lp-noteline { height: 8px; border-radius: 99px; background: var(--border-subtle); transform-origin: left; transform: scaleX(0); transition: transform 900ms var(--ease-out); transition-delay: var(--d, 0ms); }
+.is-on .lp-noteline { transform: scaleX(1); }
+.lp-formula { font-family: var(--font-serif); font-style: italic; font-size: 22px; color: var(--text-primary); }
+
+/* scene 2: quiz option picks itself */
+.lp-opt { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 14px; border: 1px solid var(--border-subtle); background: var(--bg-surface); font-size: 13px; color: var(--text-secondary); transition: all 500ms var(--ease-out); }
+.lp-opt i { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--border-subtle); flex-shrink: 0; transition: all 400ms var(--ease-out); }
+.is-on .lp-opt.is-pick { border-color: var(--accent-primary); background: var(--accent-soft); color: var(--text-primary); transition-delay: 700ms; }
+.is-on .lp-opt.is-pick i { border-color: var(--accent-primary); background: var(--accent-primary); box-shadow: inset 0 0 0 3px var(--bg-surface); transition-delay: 700ms; }
+
+/* scene 3: roadmap weeks fill */
+.lp-week-bar { height: 6px; border-radius: 99px; background: var(--border-subtle); overflow: hidden; }
+.lp-week-bar > b { display: block; height: 100%; background: var(--accent-primary); width: 0; transition: width 1100ms var(--ease-out); transition-delay: var(--d, 0ms); }
+.is-on .lp-week-bar > b { width: var(--w); }
+
+/* hero dashboard mock: bars fill once on load */
+.lp-week-bar > b.lp-hero-bar { animation: lp-bar 1.4s var(--ease-out) forwards; animation-delay: var(--d, 0ms); }
+@keyframes lp-bar { from { width: 0; } to { width: var(--w); } }
+
+/* ---------- pinned failover ---------- */
+.lp-pin { height: 240vh; position: relative; }
+.lp-pin-inner { position: sticky; top: 0; height: 100vh; display: flex; align-items: center; }
+.lp-tier { position: relative; display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-radius: 16px; border: 1px solid var(--border-subtle); background: var(--bg-surface); font-family: var(--font-mono); font-size: 13px; color: var(--text-muted); transition: all 450ms var(--ease-out); }
+.lp-tier .lp-state { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+.lp-tier.is-active { border-color: var(--accent-primary); background: var(--accent-soft); color: var(--accent-primary); transform: translateX(6px); }
+.lp-tier.is-limited { border-color: #F2C46D; background: #FFF8E8; color: #9A6700; }
+.lp-tier.is-limited .lp-dot { background: #E0A100; }
+.lp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border-subtle); margin-right: 10px; transition: background 300ms; }
+.lp-tier.is-active .lp-dot { background: var(--accent-primary); box-shadow: 0 0 0 4px var(--accent-soft); }
+.lp-wire { width: 1.5px; height: 22px; margin-left: 22px; background: var(--border-subtle); position: relative; overflow: hidden; }
+.lp-wire > b { position: absolute; inset: 0; background: var(--accent-primary); transform-origin: top; transform: scaleY(var(--w, 0)); }
+.lp-log { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); min-height: 3.2em; }
+.lp-log-line { opacity: 0; transform: translateY(6px); transition: all 400ms var(--ease-out); }
+.lp-log-line.is-in { opacity: 1; transform: none; }
+
+/* ---------- final CTA ---------- */
+.lp-big { --p: 0; transform: scale(calc(0.86 + var(--p) * 0.14)); opacity: calc(0.25 + var(--p) * 0.75); will-change: transform; }
+
+/* ---------- reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .lp *, .lp *::before, .lp *::after { animation: none !important; transition: none !important; }
+  .lp-line > span, .lp-fade, [data-reveal] { transform: none !important; opacity: 1 !important; }
+  .lp-shot, .lp-big { transform: none !important; opacity: 1 !important; }
+  .lp-noteline { transform: none !important; }
+  .lp-week-bar > b { width: var(--w) !important; }
+}
+
+/* ---------- mobile ---------- */
+@media (max-width: 767px) {
+  .lp-step { min-height: auto; opacity: 1; padding: 28px 0; }
+  .lp-pin { height: auto; }
+  .lp-pin-inner { position: static; height: auto; padding: 72px 0; }
+}

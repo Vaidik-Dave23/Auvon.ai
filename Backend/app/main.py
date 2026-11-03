@@ -40,6 +40,7 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 origins = [
     "https://auvon-ai.vercel.app",
     "https://auvon-be0imxvrg-vaidik-dave23s-projects.vercel.app",
+    "https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net",
     "http://localhost:5173",
     "http://localhost:3000",
 ]

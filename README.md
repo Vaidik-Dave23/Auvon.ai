@@ -6,7 +6,7 @@
 A production-grade, full-stack educational system designed to convert unstructured academic material, video lectures, and textbook PDFs into structured notes, progressive execution roadmaps, and adaptive assessments.
 
 [![Frontend](https://img.shields.io/badge/Frontend-auvon--ai.vercel.app-4f46e5?style=flat-square&labelColor=1e1e2e)](https://auvon-ai.vercel.app)
-[![Backend](https://img.shields.io/badge/Backend-Azure%20App%20Service-0078D4?style=flat-square&labelColor=1e1e2e&logo=microsoftazure)](https://auvonai.azurewebsites.net)
+[![Backend](https://img.shields.io/badge/Backend-Azure%20App%20Service-0078D4?style=flat-square&labelColor=1e1e2e&logo=microsoftazure)](https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.135-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react)](https://react.dev)
 [![Database](https://img.shields.io/badge/Database-MongoDB%20Atlas-47A248?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com/atlas)
@@ -53,10 +53,10 @@ The system is engineered around cost efficiency, modularity, and operational res
 | Component | Target Platform | URL | Operational Status |
 | :--- | :--- | :--- | :--- |
 | **Frontend Application** | Vercel (Edge CDN) | [https://auvon-ai.vercel.app](https://auvon-ai.vercel.app) | Production |
-| **Backend API Service** | Azure App Service (Linux, Python 3.12) | [https://auvonai.azurewebsites.net](https://auvonai.azurewebsites.net) | Production |
-| **Interactive API Documentation** | Swagger / OpenAPI 3.0 | [https://auvonai.azurewebsites.net/docs](https://auvonai.azurewebsites.net/docs) | Public |
-| **Telemetry & Metrics Target** | Prometheus Exporter | [https://auvonai.azurewebsites.net/metrics](https://auvonai.azurewebsites.net/metrics) | Active |
-| **Health Probe** | Heartbeat Endpoint | [https://auvonai.azurewebsites.net/health](https://auvonai.azurewebsites.net/health) | Active |
+| **Backend API Service** | Azure App Service (Linux, Python 3.12) | [https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net](https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net) | Production |
+| **Interactive API Documentation** | Swagger / OpenAPI 3.0 | [https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net/docs](https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net/docs) | Public |
+| **Telemetry & Metrics Target** | Prometheus Exporter | [https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net/metrics](https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net/metrics) | Active |
+| **Health Probe** | Heartbeat Endpoint | [https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net/health](https://auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net/health) | Active |
 
 ---
 
