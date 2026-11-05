@@ -11,7 +11,32 @@ on:
   workflow_dispatch:
 
 jobs:
+  # Runs the backend test suite first; nothing is built or deployed if a test fails.
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            Backend/requirements.txt
+            Backend/requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install -r Backend/requirements.txt -r Backend/requirements-dev.txt
+
+      - name: Run backend tests
+        working-directory: Backend
+        run: python -m pytest -q
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read # This is required for actions/checkout
@@ -76,4 +101,3 @@ jobs:
           app-name: 'AuvonAI'
           slot-name: 'Production'
           startup-command: 'python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir Backend'
-
