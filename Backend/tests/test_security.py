@@ -340,3 +340,128 @@ def test_verify_email_works_with_the_rate_limiter_on(env):
     code = env["sent"][0][2]
     r = c.post("/verify-email", json={"code": code}, headers={"Authorization": f"Bearer {token}"})
     assert r.status_code == 200, r.text
+
+
+# ---------------------------------------------------------------- refresh tokens
+
+def test_login_returns_a_refresh_token_that_renews_the_session(env):
+    c = env["client"]
+    register(c, "rt@x.com", "password123")
+    tokens = c.post("/login", json={"email": "rt@x.com", "password": "password123"}).json()
+    assert tokens["access_token"] and tokens["refresh_token"]
+    new = c.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]})
+    assert new.status_code == 200
+    body = new.json()
+    assert body["refresh_token"] and body["access_token"]
+    assert c.get("/me", headers={"Authorization": f"Bearer {body['access_token']}"}).status_code == 200
+
+
+def test_refresh_token_cannot_be_used_as_an_access_token(env):
+    c = env["client"]
+    register(c, "rt2@x.com", "password123")
+    refresh = c.post("/login", json={"email": "rt2@x.com", "password": "password123"}).json()["refresh_token"]
+    assert c.get("/me", headers={"Authorization": f"Bearer {refresh}"}).status_code == 401
+
+
+def test_access_token_cannot_be_posted_as_a_refresh_token(env):
+    c = env["client"]
+    register(c, "rt3@x.com", "password123")
+    access = c.post("/login", json={"email": "rt3@x.com", "password": "password123"}).json()["access_token"]
+    assert c.post("/auth/refresh", json={"refresh_token": access}).status_code == 401
+
+
+def test_password_reset_signs_out_existing_refresh_tokens(env):
+    c = env["client"]
+    register(c, "rt4@x.com", "password123")
+    old_refresh = c.post("/login", json={"email": "rt4@x.com", "password": "password123"}).json()["refresh_token"]
+    c.post("/auth/forgot-password", json={"email": "rt4@x.com"})
+    pin = env["sent"][-1][2]
+    assert c.post("/auth/reset-password", json={"email": "rt4@x.com", "pin": pin, "new_password": "brandnew123"}).status_code == 200
+    assert c.post("/auth/refresh", json={"refresh_token": old_refresh}).status_code == 401
+    fresh = c.post("/login", json={"email": "rt4@x.com", "password": "brandnew123"}).json()["refresh_token"]
+    assert c.post("/auth/refresh", json={"refresh_token": fresh}).status_code == 200
+
+
+def test_old_clients_can_upgrade_with_a_valid_access_token_header(env):
+    c = env["client"]
+    register(c, "rt5@x.com", "password123")
+    access = c.post("/login", json={"email": "rt5@x.com", "password": "password123"}).json()["access_token"]
+    r = c.post("/auth/refresh", headers={"Authorization": f"Bearer {access}"})
+    assert r.status_code == 200 and r.json()["refresh_token"]
+
+
+def test_refresh_rejects_garbage_and_missing_tokens(env):
+    c = env["client"]
+    assert c.post("/auth/refresh", json={"refresh_token": "not-a-jwt"}).status_code == 401
+    assert c.post("/auth/refresh").status_code == 401
+
+
+def test_expired_access_token_is_rejected_but_refresh_still_works(env):
+    from datetime import datetime, timedelta
+    from jose import jwt
+    from app.utils.token import SECRET_KEY, ALGORITHM
+    c = env["client"]
+    register(c, "rt6@x.com", "password123")
+    tokens = c.post("/login", json={"email": "rt6@x.com", "password": "password123"}).json()
+    uid = env["db"]["users"].find_one({"email": "rt6@x.com"})["id"]
+    expired = jwt.encode({"sub": "rt6@x.com", "id": uid, "type": "access", "exp": datetime.utcnow() - timedelta(minutes=1)}, SECRET_KEY, algorithm=ALGORITHM)
+    assert c.get("/me", headers={"Authorization": f"Bearer {expired}"}).status_code == 401
+    assert c.post("/auth/refresh", json={"refresh_token": tokens["refresh_token"]}).status_code == 200
+
+
+# ---------------------------------------------------------------- stats are real
+
+def test_stats_count_real_activity_streak_and_scores(env):
+    from datetime import datetime, timedelta, timezone
+    from app.routes import stats as stats_routes
+    db = env["db"]
+    for name in ["goals_col", "test_results_col", "tests_col", "tutor_lessons_col", "tutor_sessions_col", "tutor_usage_col"]:
+        env["mp"].setattr(stats_routes, name, db[name.replace("_col", "")])
+    today = datetime.now(timezone.utc)
+    day = lambda n: (today - timedelta(days=n))
+    db["tutor_usage"].insert_many([{"user_id": "s1", "date": day(n).strftime("%Y-%m-%d"), "count": 3} for n in (0, 1)])
+    db["tests"].insert_one({"user_id": "s1", "created_at": day(2).isoformat()})
+    db["tests"].insert_one({"user_id": "s1", "created_at": day(5).isoformat()})   # gap at day 3-4: not in the streak
+    db["test_results"].insert_many([{"user_id": "s1", "last_score": 80}, {"user_id": "s1", "last_score": 60}])
+    db["tutor_usage"].insert_one({"user_id": "someone-else", "date": day(3).strftime("%Y-%m-%d")})
+    as_user("s1")
+    body = env["client"].get("/stats").json()
+    assert body == {"streak": 3, "active_days_week": 4, "avg_score": 70, "tests_taken": 2}
+
+
+def test_stats_for_a_new_user_are_zero(env):
+    from app.routes import stats as stats_routes
+    for name in ["goals_col", "test_results_col", "tests_col", "tutor_lessons_col", "tutor_sessions_col", "tutor_usage_col"]:
+        env["mp"].setattr(stats_routes, name, env["db"][name.replace("_col", "")])
+    as_user("nobody")
+    assert env["client"].get("/stats").json() == {"streak": 0, "active_days_week": 0, "avg_score": 0, "tests_taken": 0}
+
+
+# ---------------------------------------------------------------- id_filter
+
+def test_id_filter_finds_every_stored_id_shape():
+    from bson import ObjectId
+    from app.database import id_filter
+    col = mongomock.MongoClient()["t"]["things"]
+    oid = ObjectId()
+    col.insert_many([
+        {"_id": oid, "id": str(oid), "name": "object-id"},
+        {"_id": "legacy-str", "name": "string _id"},
+        {"_id": ObjectId(), "id": 42, "name": "int id"},
+        {"_id": ObjectId(), "id": "abc", "name": "string id"},
+    ])
+    assert col.find_one(id_filter(str(oid)))["name"] == "object-id"
+    assert col.find_one(id_filter(oid))["name"] == "object-id"
+    assert col.find_one(id_filter("legacy-str"))["name"] == "string _id"
+    assert col.find_one(id_filter(42))["name"] == "int id"
+    assert col.find_one(id_filter("42"))["name"] == "int id"
+    assert col.find_one(id_filter("abc"))["name"] == "string id"
+    assert col.find_one(id_filter("nope")) is None
+
+
+def test_id_filter_only_uses_indexed_fields_for_object_ids():
+    from bson import ObjectId
+    from app.database import id_filter
+    f = id_filter(str(ObjectId()))
+    fields = {k for clause in f["$or"] for k in clause}
+    assert fields <= {"_id", "id"} and len(f["$or"]) == 2

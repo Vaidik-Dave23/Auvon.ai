@@ -1,12 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
 from app.schemas.user import (
     UserCreate, UserLogin, UserOut, UserUpdate, VerifyEmailRequest, GoogleAuthRequest,
-    ForgotPasswordRequest, ResetPasswordRequest,
+    ForgotPasswordRequest, ResetPasswordRequest, RefreshRequest,
 )
-from app.utils.token import hash_password, verify_password, create_access_token
+from app.utils.token import hash_password, verify_password, issue_tokens, SECRET_KEY, ALGORITHM
+from jose import jwt, JWTError
 from app.database import get_db, users_col, id_filter, serialize_doc
 from app.models.user import User
 from app.utils.dependencies import get_current_user, get_verified_user
+from typing import Optional
 from app.utils.mail import generate_otp, send_verification_email, send_password_reset_email, email_configured
 from datetime import datetime, timedelta
 import os
@@ -100,10 +102,8 @@ def register(request: Request, user: UserCreate, background_tasks: BackgroundTas
         _start_verification(background_tasks, {"_id": inserted.inserted_id}, user.email, user.name)
         is_verified = False
 
-    access_token = create_access_token(data={"sub": user.email, "id": user_id_str})
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
+        **issue_tokens(user.email, user_id_str),
         "is_verified": is_verified,
         "message": "User registered successfully." if is_verified else "Check your email for a verification code."
     }
@@ -117,10 +117,8 @@ def login(request: Request, user: UserLogin, db = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     user_id_str = str(db_user.get("_id") or db_user.get("id"))
-    access_token = create_access_token(data={"sub": db_user["email"], "id": user_id_str})
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
+        **issue_tokens(db_user["email"], user_id_str, db_user.get("token_version", 0)),
         "is_verified": db_user.get("is_verified", False)
     }
 
@@ -281,6 +279,7 @@ def reset_password(request: Request, body: ResetPasswordRequest, db = Depends(ge
             "verification_code_expires_at": None,
         },
         "$unset": {"reset_pin_hash": "", "reset_pin_expires_at": "", "reset_attempts": ""},
+        "$inc": {"token_version": 1},   # signs out every existing session
     })
     _drop_user_cache(user_id)
     return {"message": "Password updated. You can sign in with your new password."}
@@ -345,16 +344,17 @@ def _handle_google_auth(payload: GoogleAuthRequest, db):
             # the inbox. Google just proved it, so the real owner is here: drop the old password
             # so whoever registered it first can't keep logging in.
             update_fields["password"] = hash_password(secrets.token_urlsafe(32))
+            # and sign out every session the squatter had
+            update_fields["token_version"] = int(db_user.get("token_version") or 0) + 1
+            db_user["token_version"] = update_fields["token_version"]
         if not db_user.get("id"):
             update_fields["id"] = user_id_str
             db_user["id"] = user_id_str
         users_col.update_one({"_id": db_user["_id"]}, {"$set": update_fields})
         db_user["is_verified"] = True
 
-    access_token = create_access_token(data={"sub": db_user.get("email", email), "id": user_id_str})
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
+        **issue_tokens(db_user.get("email", email), user_id_str, db_user.get("token_version", 0)),
         "is_verified": db_user.get("is_verified", True),
         "user": {
             "id": user_id_str,
@@ -377,10 +377,38 @@ def google_login_alias(payload: GoogleAuthRequest, db = Depends(get_db)):
 
 @router.post("/auth/refresh")
 @router.post("/refresh")
-def refresh_access_token(current_user: User = Depends(get_current_user)):
-    access_token = create_access_token(data={"sub": current_user.email, "id": current_user.id})
+@limiter.limit("30/minute")
+def refresh_access_token(request: Request, body: Optional[RefreshRequest] = None):
+    """Swap a refresh token for a fresh access token + rotated refresh token.
+
+    Older clients that only have an access token can still send it as a Bearer
+    header while it's valid; they get a refresh token back and use that from then on.
+    """
+    invalid = HTTPException(status_code=401, detail="Session expired. Please sign in again.")
+    token = (body.refresh_token if body else None) or ""
+    expected_type = "refresh"
+    if not token:
+        auth_header = request.headers.get("authorization", "")
+        if not auth_header.lower().startswith("bearer "):
+            raise invalid
+        token, expected_type = auth_header.split(" ", 1)[1], "access"
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    except JWTError:
+        raise invalid
+    token_type = payload.get("type") or "access"
+    if token_type != expected_type or not payload.get("id"):
+        raise invalid
+
+    user_doc = users_col.find_one(id_filter(payload["id"]))
+    if not user_doc:
+        raise invalid
+    version = int(user_doc.get("token_version") or 0)
+    if token_type == "refresh" and int(payload.get("ver") or 0) != version:
+        raise invalid   # password was reset / sessions revoked since this token was issued
+
     return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "is_verified": current_user.is_verified
+        **issue_tokens(user_doc.get("email"), str(user_doc.get("_id") or user_doc.get("id")), version),
+        "is_verified": bool(user_doc.get("is_verified")),
     }

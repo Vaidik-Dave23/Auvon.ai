@@ -34,6 +34,7 @@ function ProtectedRoute({ children }) {
       } catch (err) {
         console.error("Verification check failed:", err);
         localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
         sessionStorage.clear();
       } finally {
         setLoading(false);

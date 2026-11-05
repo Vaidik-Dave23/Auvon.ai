@@ -4,6 +4,42 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
 });
 
+// ---- session helpers (access token: 60 min, refresh token: 30 days) ----
+export function saveSession(data) {
+  if (data?.access_token) localStorage.setItem("token", data.access_token);
+  if (data?.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
+}
+
+export function clearSession() {
+  localStorage.removeItem("token");
+  localStorage.removeItem("refresh_token");
+  sessionStorage.clear();
+}
+
+// One refresh at a time: parallel 401s all wait for the same request.
+let refreshPromise = null;
+export function refreshSession() {
+  if (!refreshPromise) {
+    const refreshToken = localStorage.getItem("refresh_token");
+    const accessToken = localStorage.getItem("token");
+    refreshPromise = axios
+      .post(
+        `${import.meta.env.VITE_API_URL}/auth/refresh`,
+        refreshToken ? { refresh_token: refreshToken } : {},
+        // older sessions have no refresh token yet: upgrade with the (still valid) access token
+        refreshToken || !accessToken ? {} : { headers: { Authorization: `Bearer ${accessToken}` } }
+      )
+      .then((res) => {
+        saveSession(res.data);
+        return res.data.access_token;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
 
@@ -13,20 +49,6 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
-
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach((prom) => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  failedQueue = [];
-};
 
 api.interceptors.response.use(
   (response) => response,
@@ -39,8 +61,7 @@ api.interceptors.response.use(
       error.response.status === 404 &&
       error.response.data?.detail === "User not found"
     ) {
-      localStorage.removeItem("token");
-      sessionStorage.clear();
+      clearSession();
       if (
         !window.location.pathname.startsWith("/login") &&
         !window.location.pathname.startsWith("/register") &&
@@ -75,47 +96,17 @@ api.interceptors.response.use(
       !originalRequest.url?.includes("/auth/google") &&
       !originalRequest.url?.includes("/refresh")
     ) {
-      const existingToken = localStorage.getItem("token");
-      if (!existingToken) {
+      if (!localStorage.getItem("token") && !localStorage.getItem("refresh_token")) {
         return Promise.reject(error);
       }
 
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then((token) => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch((err) => Promise.reject(err));
-      }
-
       originalRequest._retry = true;
-      isRefreshing = true;
-
       try {
-        const res = await axios.post(
-          `${import.meta.env.VITE_API_URL}/auth/refresh`,
-          {},
-          {
-            headers: {
-              Authorization: `Bearer ${existingToken}`,
-            },
-          }
-        );
-
-        const newToken = res.data.access_token;
-        localStorage.setItem("token", newToken);
-        api.defaults.headers.common.Authorization = `Bearer ${newToken}`;
-        processQueue(null, newToken);
-
+        const newToken = await refreshSession();
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch (refreshErr) {
-        processQueue(refreshErr, null);
-        localStorage.removeItem("token");
-        sessionStorage.clear();
+        clearSession();
         if (
           !window.location.pathname.startsWith("/login") &&
           !window.location.pathname.startsWith("/register") &&
@@ -124,8 +115,6 @@ api.interceptors.response.use(
           window.location.href = "/login";
         }
         return Promise.reject(refreshErr);
-      } finally {
-        isRefreshing = false;
       }
     }
 

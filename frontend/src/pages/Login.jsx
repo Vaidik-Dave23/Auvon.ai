@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api/axios";
+import api, { saveSession } from "../api/axios";
 import { authQuote } from "../content/authQuote";
 import GoogleAuthButton from "../components/GoogleAuthButton";
 
@@ -28,7 +28,7 @@ function Login() {
       });
 
       // token save
-      localStorage.setItem("token", res.data.access_token);
+      saveSession(res.data);
       sessionStorage.setItem("is_verified", res.data.is_verified ? "true" : "false");
 
       if (res.data.is_verified) {

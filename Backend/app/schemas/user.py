@@ -51,3 +51,7 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     pin: str
     new_password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: Optional[str] = None

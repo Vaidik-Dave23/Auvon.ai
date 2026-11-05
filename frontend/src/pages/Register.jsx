@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api/axios";
+import api, { saveSession } from "../api/axios";
 import { authQuote } from "../content/authQuote";
 import GoogleAuthButton from "../components/GoogleAuthButton";
 
@@ -55,7 +55,7 @@ function Register() {
 
       // Auto-login with the token received from registration
       if (res.data.access_token) {
-        localStorage.setItem("token", res.data.access_token);
+        saveSession(res.data);
         sessionStorage.setItem("is_verified", "false");
         navigate("/verify-email");
       }

@@ -7,17 +7,31 @@
 // event. Rejects with an Error that has .status (HTTP errors, before streaming starts)
 // or .partial = true (the stream broke after some text arrived).
 
+import { refreshSession } from "./axios";
+
 export async function postStream(path, { json, params, onEvent, signal } = {}) {
   const qs = params ? `?${new URLSearchParams(params)}` : "";
-  const headers = { Authorization: `Bearer ${localStorage.getItem("token") || ""}` };
-  if (json !== undefined) headers["Content-Type"] = "application/json";
+  const send = () => {
+    const headers = { Authorization: `Bearer ${localStorage.getItem("token") || ""}` };
+    if (json !== undefined) headers["Content-Type"] = "application/json";
+    return fetch(`${import.meta.env.VITE_API_URL}${path}${qs}`, {
+      method: "POST",
+      headers,
+      body: json !== undefined ? JSON.stringify(json) : undefined,
+      signal,
+    });
+  };
 
-  const res = await fetch(`${import.meta.env.VITE_API_URL}${path}${qs}`, {
-    method: "POST",
-    headers,
-    body: json !== undefined ? JSON.stringify(json) : undefined,
-    signal,
-  });
+  let res = await send();
+  if (res.status === 401) {
+    // access token expired: renew it once and try again
+    try {
+      await refreshSession();
+      res = await send();
+    } catch {
+      /* fall through with the 401 */
+    }
+  }
 
   if (!res.ok || !res.body) {
     let detail = "";

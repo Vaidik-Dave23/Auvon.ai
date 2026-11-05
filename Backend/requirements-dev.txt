@@ -1,0 +1,4 @@
+# Test-only dependencies (not installed on the server)
+pytest==9.2.0
+mongomock==4.3.0
+httpx==0.28.1

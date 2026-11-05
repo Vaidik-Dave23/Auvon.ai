@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../api/axios";
+import api, { saveSession } from "../api/axios";
 
 /**
  * GoogleAuthButton renders the official Google Identity Services sign-in / sign-up button
@@ -38,7 +38,7 @@ export default function GoogleAuthButton({
       });
 
       // Save tokens using existing auth architecture
-      localStorage.setItem("token", res.data.access_token);
+      saveSession(res.data);
       sessionStorage.setItem(
         "is_verified",
         res.data.is_verified ? "true" : "false"

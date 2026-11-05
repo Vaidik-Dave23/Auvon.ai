@@ -8,6 +8,7 @@ export default function FloatingNav({ onNewGoal }) {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
     sessionStorage.clear();
     navigate("/login");
   };

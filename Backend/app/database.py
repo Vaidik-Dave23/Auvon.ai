@@ -94,7 +94,10 @@ def init_db():
             return
         db.command("ping")
         users_col.create_index("email", unique=True)
-        users_col.create_index("id", sparse=True)
+        # id_filter() also matches on `id`; without these indexes every lookup is a full scan
+        for col in (users_col, notes_col, goals_col, steps_col, tests_col, questions_col, tasks_col,
+                    tutor_sessions_col, tutor_lessons_col, ai_logs_col):
+            col.create_index("id", sparse=True)
         tasks_col.create_index("user_id")
         goals_col.create_index("user_id")
         steps_col.create_index("goal_id")
@@ -134,21 +137,25 @@ def to_object_id(val):
 
 
 def id_filter(val):
-    """Returns a MongoDB filter that matches either _id (as ObjectId/str/int) or id (string/int)."""
-    val_str = str(val) if val is not None else ""
-    conditions = [
-        {"id": val},
-        {"id": val_str},
-        {"_id": val_str},
-    ]
+    """Filter matching a document by its id, whichever way it was stored.
+
+    Every branch of the $or hits an index (_id, or the `id` indexes created in init_db).
+    If any branch were unindexed MongoDB would scan the whole collection for every lookup.
+    """
+    val_str = str(val).strip() if val is not None else ""
+    obj_id = to_object_id(val_str)
+    if obj_id:
+        # Normal case: a 24-hex id. Match _id, plus the copy kept in `id`.
+        return {"$or": [{"_id": obj_id}, {"id": val_str}]}
+
+    conditions = [{"id": val_str}, {"_id": val_str}]
+    if val is not None and not isinstance(val, str):
+        conditions.append({"id": val})
     try:
-        conditions.append({"id": int(val)})
-        conditions.append({"_id": int(val)})
+        as_int = int(val_str)
+        conditions += [{"id": as_int}, {"_id": as_int}]
     except (ValueError, TypeError):
         pass
-    obj_id = to_object_id(val)
-    if obj_id:
-        conditions.append({"_id": obj_id})
     return {"$or": conditions}
 
 

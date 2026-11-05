@@ -84,6 +84,7 @@ function VerifyEmail() {
 
   const handleLogout = () => {
     localStorage.removeItem("token");
+    localStorage.removeItem("refresh_token");
     sessionStorage.clear();
     navigate("/");
   };
