@@ -39,6 +39,8 @@ from app.core.logging_config import get_logger
 
 log = get_logger(__name__)
 
+from app.routes.goals import owned_step  # noqa: E402
+
 router = APIRouter(tags=["videos"])
 
 # In-flight operation locks
@@ -465,17 +467,7 @@ def refresh_step_videos(
     db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    step = steps_col.find_one(id_filter(step_id))
-    goal = None
-    if step:
-        goal = goals_col.find_one(id_filter(step.get("goal_id")))
-    else:
-        goal = goals_col.find_one({"steps.id": str(step_id)})
-        if goal:
-            for s in goal.get("steps", []):
-                if str(s.get("id")) == str(step_id):
-                    step = s
-                    break
+    step, goal = owned_step(step_id, str(user.id))
 
     if not step:
         raise HTTPException(status_code=404, detail="Step not found or access denied")
@@ -533,17 +525,7 @@ def refresh_step_resources(
     db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    step = steps_col.find_one(id_filter(step_id))
-    goal = None
-    if step:
-        goal = goals_col.find_one(id_filter(step.get("goal_id")))
-    else:
-        goal = goals_col.find_one({"steps.id": str(step_id)})
-        if goal:
-            for s in goal.get("steps", []):
-                if str(s.get("id")) == str(step_id):
-                    step = s
-                    break
+    step, goal = owned_step(step_id, str(user.id))
 
     if not step:
         raise HTTPException(status_code=404, detail="Step not found or access denied")

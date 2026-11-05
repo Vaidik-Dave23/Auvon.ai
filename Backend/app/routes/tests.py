@@ -27,6 +27,8 @@ log = get_logger(__name__)
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024   # 10 MB
+
 
 # 🔥 GENERATE TEST
 @router.post("/generate", response_model=TestGenerateResponse)
@@ -40,11 +42,19 @@ def generate_test(
     db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
+    if num_questions < 1 or num_questions > 20:
+        raise HTTPException(status_code=400, detail="Number of questions must be between 1 and 20")
+    if difficulty not in ("easy", "medium", "hard"):
+        raise HTTPException(status_code=400, detail="Difficulty must be easy, medium or hard")
+    if topic and len(topic) > 300:
+        raise HTTPException(status_code=400, detail="Topic is too long")
     content = ""
     test_topic = topic
 
     if file:
-        content_bytes = file.file.read()   # sync endpoint: runs in the threadpool
+        content_bytes = file.file.read(MAX_UPLOAD_BYTES + 1)   # sync endpoint: runs in the threadpool
+        if len(content_bytes) > MAX_UPLOAD_BYTES:
+            raise HTTPException(status_code=413, detail="File is too large (max 10 MB)")
         if file.filename.lower().endswith(".pdf"):
             import fitz
             pdf = fitz.open(stream=content_bytes, filetype="pdf")

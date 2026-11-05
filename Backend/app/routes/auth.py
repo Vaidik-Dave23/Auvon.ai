@@ -1,27 +1,80 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from app.schemas.user import UserCreate, UserLogin, UserOut, UserUpdate, VerifyEmailRequest, GoogleAuthRequest
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, Request
+from app.schemas.user import (
+    UserCreate, UserLogin, UserOut, UserUpdate, VerifyEmailRequest, GoogleAuthRequest,
+    ForgotPasswordRequest, ResetPasswordRequest,
+)
 from app.utils.token import hash_password, verify_password, create_access_token
 from app.database import get_db, users_col, id_filter, serialize_doc
 from app.models.user import User
 from app.utils.dependencies import get_current_user, get_verified_user
-from app.utils.mail import generate_otp, send_verification_email
+from app.utils.mail import generate_otp, send_verification_email, send_password_reset_email, email_configured
 from datetime import datetime, timedelta
 import os
 import secrets
+import hashlib
+import hmac
+import re
 from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
+from app.core.limiter import limiter
+from app.core.cache import redis_client
 
 router = APIRouter()
 
 
+MIN_PASSWORD_LENGTH = 8
+RESET_PIN_MINUTES = 15
+RESET_MAX_ATTEMPTS = 5
+
+
+def _verification_required() -> bool:
+    """Email verification is ON by default (REQUIRE_EMAIL_VERIFICATION=false turns it off).
+    It is skipped only when no real email provider (SMTP / Resend) is configured,
+    because then codes would never arrive and every new user would be stuck."""
+    wanted = os.getenv("REQUIRE_EMAIL_VERIFICATION", "true").lower() in ("1", "true", "yes")
+    return wanted and email_configured()
+
+
+def _drop_user_cache(user_id) -> None:
+    """get_current_user caches the user for 30s; clear it after changing verification state."""
+    if redis_client:
+        try:
+            redis_client.delete(f"user:{user_id}")
+        except Exception:
+            pass
+
+
+def _pin_hash(user_id: str, pin: str) -> str:
+    # Store only a hash of the reset PIN, salted with the user id and server secret.
+    secret = os.getenv("SECRET_KEY") or ""
+    return hashlib.sha256(f"{secret}:{user_id}:{pin}".encode()).hexdigest()
+
+
+def _find_user_by_email(email: str):
+    return users_col.find_one({"email": re.compile(f"^{re.escape(email.strip())}$", re.IGNORECASE)})
+
+
+def _start_verification(background_tasks: BackgroundTasks, user_filter: dict, email: str, name: str) -> None:
+    otp_code = generate_otp()
+    users_col.update_one(user_filter, {"$set": {
+        "is_verified": False,
+        "verification_code": otp_code,
+        "verification_code_expires_at": datetime.utcnow() + timedelta(minutes=15),
+    }})
+    send_verification_email(background_tasks, email, name, otp_code)
+
+
 @router.post("/register")
-def register(user: UserCreate, background_tasks: BackgroundTasks, db = Depends(get_db)):
+@limiter.limit("5/minute")
+def register(request: Request, user: UserCreate, background_tasks: BackgroundTasks, db = Depends(get_db)):
     db_user = users_col.find_one({"email": user.email})
     if db_user:
         raise HTTPException(
             status_code=400,
             detail="Email already registered"
         )
+    if len(user.password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
 
     hashed_password = hash_password(user.password)
 
@@ -30,6 +83,9 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db = Depends(g
         "email": user.email,
         "password": hashed_password,
         "is_verified": True,
+        # Nobody has proven they own this inbox yet. Google sign-in on this email later
+        # resets the password (see _handle_google_auth), so a squatter can't keep access.
+        "email_confirmed": False,
         "created_at": datetime.utcnow(),
         "verification_code": None,
         "verification_code_expires_at": None,
@@ -39,17 +95,23 @@ def register(user: UserCreate, background_tasks: BackgroundTasks, db = Depends(g
     user_id_str = str(inserted.inserted_id)
     users_col.update_one({"_id": inserted.inserted_id}, {"$set": {"id": user_id_str}})
 
+    is_verified = True
+    if _verification_required():
+        _start_verification(background_tasks, {"_id": inserted.inserted_id}, user.email, user.name)
+        is_verified = False
+
     access_token = create_access_token(data={"sub": user.email, "id": user_id_str})
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "is_verified": True,
-        "message": "User registered successfully."
+        "is_verified": is_verified,
+        "message": "User registered successfully." if is_verified else "Check your email for a verification code."
     }
 
 
 @router.post("/login")
-def login(user: UserLogin, db = Depends(get_db)):
+@limiter.limit("10/minute")
+def login(request: Request, user: UserLogin, db = Depends(get_db)):
     db_user = users_col.find_one({"email": user.email})
     if not db_user or not verify_password(user.password, db_user.get("password", "")):
         raise HTTPException(status_code=401, detail="Invalid email or password")
@@ -75,8 +137,9 @@ def get_me(current_user = Depends(get_current_user)):
 
 
 @router.put("/me", response_model=UserOut)
-def update_profile(user_update: UserUpdate, db = Depends(get_db), current_user = Depends(get_verified_user)):
-    if user_update.email != current_user.email:
+def update_profile(user_update: UserUpdate, background_tasks: BackgroundTasks, db = Depends(get_db), current_user = Depends(get_verified_user)):
+    email_changed = user_update.email.lower() != (current_user.email or "").lower()
+    if email_changed:
         existing = users_col.find_one({"email": user_update.email})
         if existing:
             raise HTTPException(status_code=400, detail="Email already in use")
@@ -85,8 +148,14 @@ def update_profile(user_update: UserUpdate, db = Depends(get_db), current_user =
         "name": user_update.name,
         "email": user_update.email,
     }
+    if email_changed:
+        update_fields["email_confirmed"] = False
 
     users_col.update_one(id_filter(current_user.id), {"$set": update_fields})
+    if email_changed and _verification_required():
+        _start_verification(background_tasks, id_filter(current_user.id), user_update.email, user_update.name)
+        current_user.is_verified = False
+    _drop_user_cache(current_user.id)
     current_user.name = user_update.name
     current_user.email = user_update.email
 
@@ -100,33 +169,43 @@ def update_profile(user_update: UserUpdate, db = Depends(get_db), current_user =
 
 
 @router.post("/verify-email")
+@limiter.limit("10/minute")
 def verify_email(
-    request: VerifyEmailRequest,
+    request: Request,            # slowapi needs the Starlette request under exactly this name
+    body: VerifyEmailRequest,
     db = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.is_verified:
+    # Read the code from the database: the cached user (Redis) doesn't carry it.
+    user_doc = users_col.find_one(id_filter(current_user.id)) or {}
+    if user_doc.get("is_verified"):
         return {"message": "Email is already verified"}
 
-    if not current_user.verification_code or current_user.verification_code != request.code:
+    stored = user_doc.get("verification_code") or ""
+    if not stored or not hmac.compare_digest(stored, (body.code or "").strip()):
         raise HTTPException(status_code=400, detail="Invalid verification code")
 
-    if current_user.verification_code_expires_at and current_user.verification_code_expires_at < datetime.utcnow():
+    expires = user_doc.get("verification_code_expires_at")
+    if expires and expires < datetime.utcnow():
         raise HTTPException(status_code=400, detail="Verification code has expired")
 
     users_col.update_one(
         id_filter(current_user.id),
         {"$set": {
             "is_verified": True,
+            "email_confirmed": True,
             "verification_code": None,
             "verification_code_expires_at": None
         }}
     )
+    _drop_user_cache(current_user.id)
     return {"message": "Email verified successfully"}
 
 
 @router.post("/resend-verification")
+@limiter.limit("3/minute")
 def resend_verification(
+    request: Request,
     background_tasks: BackgroundTasks,
     db = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -149,16 +228,77 @@ def resend_verification(
     return {"message": "Verification code resent successfully"}
 
 
+@router.post("/auth/forgot-password")
+@limiter.limit("3/minute")
+def forgot_password(request: Request, body: ForgotPasswordRequest, background_tasks: BackgroundTasks, db = Depends(get_db)):
+    """Email a 6-digit PIN for resetting the password.
+    Always answers the same way, so nobody can use it to check which emails have accounts."""
+    generic = {"message": "If an account exists for that email, a reset PIN has been sent."}
+    user_doc = _find_user_by_email(body.email)
+    if not user_doc:
+        return generic
+
+    pin = generate_otp()
+    user_id = str(user_doc.get("_id"))
+    users_col.update_one({"_id": user_doc["_id"]}, {"$set": {
+        "reset_pin_hash": _pin_hash(user_id, pin),
+        "reset_pin_expires_at": datetime.utcnow() + timedelta(minutes=RESET_PIN_MINUTES),
+        "reset_attempts": 0,
+    }})
+    send_password_reset_email(background_tasks, user_doc["email"], user_doc.get("name") or "", pin)
+    return generic
+
+
+@router.post("/auth/reset-password")
+@limiter.limit("10/minute")
+def reset_password(request: Request, body: ResetPasswordRequest, db = Depends(get_db)):
+    """Set a new password with the PIN from the reset email."""
+    invalid = HTTPException(status_code=400, detail="Invalid or expired PIN")
+    if len(body.new_password) < MIN_PASSWORD_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+
+    user_doc = _find_user_by_email(body.email)
+    if not user_doc or not user_doc.get("reset_pin_hash"):
+        raise invalid
+    expires = user_doc.get("reset_pin_expires_at")
+    if not expires or expires < datetime.utcnow():
+        raise invalid
+    if int(user_doc.get("reset_attempts") or 0) >= RESET_MAX_ATTEMPTS:
+        raise HTTPException(status_code=429, detail="Too many wrong attempts. Request a new PIN.")
+
+    user_id = str(user_doc.get("_id"))
+    if not hmac.compare_digest(user_doc["reset_pin_hash"], _pin_hash(user_id, (body.pin or "").strip())):
+        users_col.update_one({"_id": user_doc["_id"]}, {"$inc": {"reset_attempts": 1}})
+        raise invalid
+
+    users_col.update_one({"_id": user_doc["_id"]}, {
+        "$set": {
+            "password": hash_password(body.new_password),
+            # the PIN arrived in their inbox, so they own this email
+            "email_confirmed": True,
+            "is_verified": True,
+            "verification_code": None,
+            "verification_code_expires_at": None,
+        },
+        "$unset": {"reset_pin_hash": "", "reset_pin_expires_at": "", "reset_attempts": ""},
+    })
+    _drop_user_cache(user_id)
+    return {"message": "Password updated. You can sign in with your new password."}
+
+
 def _handle_google_auth(payload: GoogleAuthRequest, db):
     if not payload.credential or not payload.credential.strip():
         raise HTTPException(status_code=400, detail="Missing Google authentication credential")
 
     google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+    if not google_client_id:
+        # Without an audience check, a Google token issued to ANY app would be accepted.
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
     try:
         id_info = id_token.verify_oauth2_token(
             payload.credential.strip(),
             google_requests.Request(),
-            audience=google_client_id if google_client_id else None
+            audience=google_client_id
         )
     except ValueError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
@@ -178,7 +318,6 @@ def _handle_google_auth(payload: GoogleAuthRequest, db):
 
     name = id_info.get("name") or id_info.get("given_name") or email.split("@")[0]
 
-    import re
     db_user = users_col.find_one({"email": re.compile(f"^{re.escape(email)}$", re.IGNORECASE)})
     if not db_user:
         random_password = hash_password(secrets.token_urlsafe(32))
@@ -187,6 +326,7 @@ def _handle_google_auth(payload: GoogleAuthRequest, db):
             "email": email,
             "password": random_password,
             "is_verified": True,
+            "email_confirmed": True,
             "created_at": datetime.utcnow(),
             "verification_code": None,
             "verification_code_expires_at": None
@@ -199,7 +339,12 @@ def _handle_google_auth(payload: GoogleAuthRequest, db):
         db_user["id"] = user_id_str
     else:
         user_id_str = str(db_user.get("_id") or db_user.get("id"))
-        update_fields = {"is_verified": True}
+        update_fields = {"is_verified": True, "email_confirmed": True}
+        if db_user.get("email_confirmed") is False:
+            # This account was created with a password by someone who never proved they own
+            # the inbox. Google just proved it, so the real owner is here: drop the old password
+            # so whoever registered it first can't keep logging in.
+            update_fields["password"] = hash_password(secrets.token_urlsafe(32))
         if not db_user.get("id"):
             update_fields["id"] = user_id_str
             db_user["id"] = user_id_str

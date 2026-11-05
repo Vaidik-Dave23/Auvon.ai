@@ -14,6 +14,23 @@ log = get_logger(__name__)
 
 router = APIRouter()
 
+MAX_WEEKS = 12
+
+
+def owned_step(step_id, user_id: str):
+    """Return (step, goal) only if the step belongs to one of this user's goals, else 404."""
+    step = steps_col.find_one(id_filter(step_id))
+    goal = None
+    if step:
+        goal = goals_col.find_one({"$and": [id_filter(step.get("goal_id")), {"user_id": user_id}]})
+    else:
+        goal = goals_col.find_one({"steps.id": str(step_id), "user_id": user_id})
+        if goal:
+            step = next((s for s in goal.get("steps", []) if str(s.get("id")) == str(step_id)), None)
+    if not step or not goal:
+        raise HTTPException(status_code=404, detail="Step not found")
+    return step, goal
+
 
 @router.post("/goals/ai")
 @limiter.limit("5/minute")
@@ -25,6 +42,11 @@ def create_goal_ai(
     user = Depends(get_verified_user)
 ):
     user_id_str = str(user.id)
+    title = (title or "").strip()
+    if not title or len(title) > 200:
+        raise HTTPException(status_code=400, detail="Goal title must be 1-200 characters")
+    if weeks < 1 or weeks > MAX_WEEKS:
+        raise HTTPException(status_code=400, detail=f"Weeks must be between 1 and {MAX_WEEKS}")
     new_goal = {
         "title": title,
         "user_id": user_id_str,
@@ -175,11 +197,9 @@ def toggle_step(
     db = Depends(get_db),
     user = Depends(get_verified_user)
 ):
-    step = steps_col.find_one(id_filter(step_id))
-    if not step:
-        goal = goals_col.find_one({"steps.id": str(step_id)})
-        if not goal:
-            raise HTTPException(status_code=403, detail="Access denied or step not found")
+    step, owner_goal = owned_step(step_id, str(user.id))
+    if not steps_col.find_one(id_filter(step_id)):
+        goal = owner_goal
         for s in goal.get("steps", []):
             if str(s.get("id")) == str(step_id):
                 s["is_completed"] = 0 if s.get("is_completed") else 1
@@ -192,11 +212,11 @@ def toggle_step(
     step["is_completed"] = new_val
 
     goals_col.update_many(
-        {"steps._id": step["_id"]},
+        {"steps._id": step["_id"], "user_id": str(user.id)},
         {"$set": {"steps.$.is_completed": new_val}}
     )
     goals_col.update_many(
-        {"steps.id": str(step_id)},
+        {"steps.id": str(step_id), "user_id": str(user.id)},
         {"$set": {"steps.$.is_completed": new_val}}
     )
 

@@ -15,6 +15,7 @@ import NoteReader from "./pages/NoteReader";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import VerifyEmail from "./pages/VerifyEmail";
+import ForgotPassword from "./pages/ForgotPassword";
 import Tests from "./pages/Tests";
 import TestAttempt from "./pages/TestAttempt";
 import TestResult from "./pages/TestResult";
@@ -32,6 +33,7 @@ function App() {
           <Route path="/about" element={<About />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify-email" element={<ProtectedRoute><VerifyEmail /></ProtectedRoute>} />
 
           {/* PROTECTED */}

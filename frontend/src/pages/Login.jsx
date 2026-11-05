@@ -87,9 +87,18 @@ function Login() {
               </div>
 
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
-                  Password
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-mono font-semibold text-[var(--text-secondary)] uppercase tracking-wider">
+                    Password
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/forgot-password")}
+                    className="text-xs text-[var(--accent-primary)] font-semibold hover:underline focus:outline-none cursor-pointer"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
                 <input
                   type="password"
                   placeholder="••••••••"

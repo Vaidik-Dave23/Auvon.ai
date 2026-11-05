@@ -39,7 +39,16 @@ if _has_pymongo and MONGODB_URI:
         log.error("mongo_connection_initialization_failed", error=str(e))
         db = None
 else:
-    # Dummy collection fallback if pymongo is not yet installed in local dev
+    # Never fall back silently: a fake database makes logins "work" with a fake user
+    # and quietly drops every write. Fail loudly unless explicitly allowed (tests only).
+    if os.getenv("ALLOW_MOCK_DB", "").lower() not in ("1", "true", "yes"):
+        raise RuntimeError(
+            "MongoDB is not available: "
+            + ("pymongo is not installed (pip install -r requirements.txt)" if not _has_pymongo
+               else "MONGODB_URI is not set")
+            + ". Set ALLOW_MOCK_DB=1 only for tests."
+        )
+
     class MockCollection:
         def find(self, *args, **kwargs): return []
         def find_one(self, *args, **kwargs): return None

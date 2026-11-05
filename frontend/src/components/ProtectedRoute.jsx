@@ -56,12 +56,16 @@ function ProtectedRoute({ children }) {
   }
 
   const isVerifyPage = location.pathname === "/verify-email";
+  // React Router reuses this component instance when moving between protected routes,
+  // so `verified` can be stale (e.g. right after /verify-email succeeds). The verify page
+  // writes the fresh result to sessionStorage, so trust that too.
+  const isVerified = verified || sessionStorage.getItem("is_verified") === "true";
 
-  if (!verified && !isVerifyPage) {
+  if (!isVerified && !isVerifyPage) {
     return <Navigate to="/verify-email" replace />;
   }
 
-  if (verified && isVerifyPage) {
+  if (isVerified && isVerifyPage) {
     return <Navigate to="/dashboard" replace />;
   }
 

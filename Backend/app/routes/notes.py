@@ -290,6 +290,19 @@ def generate_notes(
     return {"source": "ai", "note": note_to_dict(new_note)}
 
 
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024   # 10 MB
+
+
+def read_pdf_upload(file: UploadFile) -> bytes:
+    """Read an uploaded PDF with a size cap, so one huge file can't exhaust server memory."""
+    data = file.file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="File is too large (max 10 MB)")
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    return data
+
+
 def _sse(event: dict) -> str:
     return f"data: {json.dumps(event, default=str)}\n\n"
 
@@ -386,7 +399,7 @@ def generate_from_pdf(
     db = Depends(get_db),
     user = Depends(get_verified_user),
 ):
-    content_bytes = file.file.read()   # sync endpoint: runs in the threadpool, so blocking I/O is fine
+    content_bytes = read_pdf_upload(file)
     hash_key = generate_hash(content_bytes.decode(errors="ignore")[:1000])
     user_id_str = str(user.id)
 
