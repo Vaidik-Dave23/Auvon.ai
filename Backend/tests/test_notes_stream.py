@@ -198,3 +198,32 @@ def test_request_logging_middleware_never_crashes_on_a_bad_key(monkeypatch):
     assert mw._extract_user_id(type("R", (), {"headers": {"authorization": "Bearer not-a-jwt"}})()) is None
     client = TestClient(app)
     assert client.get("/health", headers={"Authorization": "Bearer garbage"}).status_code == 200
+
+
+def test_stream_decodes_utf8_even_without_charset(env):
+    """Gemini's SSE has no charset; requests would decode as Latin-1 and mangle emoji."""
+    import io
+    from requests.models import Response
+
+    def post(url, headers=None, json=None, stream=False, timeout=None):
+        body = ('data: ' + __import__("json").dumps({"choices": [{"delta": {"content": "## 📘 Overview — naïve café"}}]}, ensure_ascii=False)
+                + '\n\ndata: [DONE]\n\n').encode("utf-8")
+        r = Response()
+        r.status_code = 200
+        r.headers["Content-Type"] = "text/event-stream"
+        r.raw = io.BytesIO(body)
+        r.encoding = None
+        return r
+
+    env["monkeypatch"].setattr(ai_mod._session, "post", post)
+    ev = events(env["client"].post("/notes/generate/stream", params={"query": "Encoding check"}))
+    assert ev[-1]["note"]["content"] == "## 📘 Overview — naïve café"
+
+
+def test_repair_mojibake():
+    from scripts.fix_mojibake import repair
+    good = "## 📘 Domain Overview — naïve"
+    broken = good.encode("utf-8").decode("latin-1")
+    assert repair(broken) == good
+    assert repair(good) == good          # already fine: untouched
+    assert repair("plain ascii") == "plain ascii"

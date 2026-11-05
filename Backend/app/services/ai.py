@@ -393,6 +393,9 @@ def stream_ai(prompt: list[dict], endpoint_name: str = "custom", temperature: fl
             continue
 
         parts, usage, first_token_at = [], {}, None
+        # The SSE response has no charset, and requests then assumes ISO-8859-1,
+        # which turns every emoji / non-ASCII character into mojibake ("ðŸ“˜").
+        resp.encoding = "utf-8"
         try:
             for line in resp.iter_lines(decode_unicode=True):
                 if not line or not line.startswith("data:"):
