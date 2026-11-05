@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import Sidebar from "../components/Sidebar";
+import TutorPanel from "../components/TutorPanel";
 import { useTheme } from "../context/ThemeContext";
 import { getCreativeGreeting } from "../utils/greetings";
 
@@ -305,6 +306,14 @@ function Dashboard() {
               >
                 Take Calm Quiz
               </button>
+
+              <button
+                type="button"
+                onClick={() => navigate("/call")}
+                className="auvon-pill-btn-secondary cursor-pointer text-sm"
+              >
+                Voice Tutor Call
+              </button>
             </div>
 
             <button
@@ -568,6 +577,9 @@ function Dashboard() {
           </section>
         </div>
       </main>
+
+      {/* Socratic AI Tutor Panel */}
+      <TutorPanel />
     </div>
   );
 }

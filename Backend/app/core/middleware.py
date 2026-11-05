@@ -20,19 +20,22 @@ import os
 import time
 import uuid
 
-from jose import JWTError, jwt
+from jose import jwt
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
 import structlog
+from dotenv import load_dotenv
 
 from app.core.logging_config import get_logger
 from app.core.metrics import API_ERRORS
 
 log = get_logger(__name__)
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
+# main.py imports this module before anything else has loaded .env, so load it here
+load_dotenv()
+SECRET_KEY = os.getenv("SECRET_KEY")  # never hardcode a fallback: a known secret lets anyone forge tokens
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 
 def _extract_user_id(request: Request) -> int | None:
@@ -40,10 +43,14 @@ def _extract_user_id(request: Request) -> int | None:
     if not auth_header.lower().startswith("bearer "):
         return None
     token = auth_header.split(" ", 1)[1]
+    if not SECRET_KEY:
+        return None
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload.get("id")
-    except JWTError:
+    except Exception:
+        # Only used to tag log lines; real auth happens in get_current_user.
+        # A bad token or key must never turn into a 500 here.
         return None
 
 

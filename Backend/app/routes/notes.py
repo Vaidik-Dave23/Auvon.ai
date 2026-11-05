@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, UploadFile, File, BackgroundTasks, HTTPException, Request
+from fastapi.responses import StreamingResponse
+import threading
 from typing import Union
 from app.database import (
     get_db,
@@ -15,7 +17,7 @@ import json
 import hashlib
 from app.models.notes import Notes, UserNotes
 from app.utils.hash import generate_hash
-from app.services.ai import generate_ai_notes, ai
+from app.services.ai import generate_ai_notes, ai, build_notes_prompt, stream_ai
 from app.utils.dependencies import get_verified_user
 from app.utils.embeddings import get_embedding, get_query_embedding
 from datetime import datetime
@@ -288,6 +290,80 @@ def generate_notes(
     return {"source": "ai", "note": note_to_dict(new_note)}
 
 
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, default=str)}\n\n"
+
+
+@router.post("/generate/stream")
+@limiter.limit("10/minute")
+def generate_notes_stream(
+    request: Request,
+    query: str,
+    db = Depends(get_db),
+    user = Depends(get_verified_user),
+):
+    """
+    Same as /notes/generate, but streams the note as it is written
+    (Server-Sent Events), so the first words show up in a second or two.
+
+    Events: {"type": "delta", "text": "..."} ... then
+            {"type": "done", "source": "ai" | "cache", "note": {...}}
+         or {"type": "error", "detail": "..."}
+    """
+    query = (query or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Topic is required")
+    if len(query) > 300:
+        raise HTTPException(status_code=400, detail="Topic is too long")
+    user_id_str = str(user.id)
+    hash_key = generate_hash(query)
+
+    existing_note = notes_col.find_one({"hash_key": hash_key})
+    if existing_note:
+        note_id_str = str(existing_note.get("_id") or existing_note.get("id"))
+        if not user_notes_col.find_one({"user_id": user_id_str, "note_id": note_id_str}):
+            user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
+
+        def cached():
+            yield _sse({"type": "done", "source": "cache", "note": note_to_dict(existing_note)})
+
+        return StreamingResponse(cached(), media_type="text/event-stream",
+                                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    def events():
+        parts = []
+        try:
+            for delta in stream_ai(build_notes_prompt(query, is_pdf=False), endpoint_name="generate_notes_stream"):
+                parts.append(delta)
+                yield _sse({"type": "delta", "text": delta})
+        except Exception as e:
+            log.error("notes_stream_failed", query=query, error=str(e))
+            if not parts:
+                yield _sse({"type": "error", "detail": "Generation failed. Please try again."})
+                return
+
+        content = "".join(parts)
+        new_note = {
+            "title": query,
+            "content": content,
+            "hash_key": hash_key,
+            "source": "keyword",
+            "created_at": datetime.utcnow().isoformat(),
+        }
+        inserted = notes_col.insert_one(new_note)
+        note_id_str = str(inserted.inserted_id)
+        notes_col.update_one({"_id": inserted.inserted_id}, {"$set": {"id": note_id_str}})
+        new_note["_id"] = inserted.inserted_id
+        new_note["id"] = note_id_str
+        user_notes_col.insert_one({"user_id": user_id_str, "note_id": note_id_str})
+        # embeddings for Q&A / tutor are built in the background, after the student already has the note
+        threading.Thread(target=embed_and_store_note_chunks, args=(note_id_str, content), daemon=True).start()
+        yield _sse({"type": "done", "source": "ai", "note": note_to_dict(new_note)})
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
 @router.get("/my")
 def get_my_notes(db = Depends(get_db), user = Depends(get_verified_user)):
     user_id_str = str(user.id)
@@ -303,14 +379,14 @@ def get_my_notes(db = Depends(get_db), user = Depends(get_verified_user)):
 
 @router.post("/pdf")
 @limiter.limit("5/minute")
-async def generate_from_pdf(
+def generate_from_pdf(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db = Depends(get_db),
     user = Depends(get_verified_user),
 ):
-    content_bytes = await file.read()
+    content_bytes = file.file.read()   # sync endpoint: runs in the threadpool, so blocking I/O is fine
     hash_key = generate_hash(content_bytes.decode(errors="ignore")[:1000])
     user_id_str = str(user.id)
 
@@ -346,16 +422,8 @@ async def generate_from_pdf(
     return {"source": "ai", "note": note_to_dict(new_note)}
 
 
-@router.post("/{note_id}/query")
-@limiter.limit("15/minute")
-def query_note(
-    request: Request,
-    note_id: Union[int, str],
-    query: str,
-    background_tasks: BackgroundTasks,
-    db = Depends(get_db),
-    user = Depends(get_verified_user),
-):
+def _prepare_note_query(note_id, query: str, user) -> dict:
+    """Auth check, cache lookup, retrieval and prompt for a note question (no model call)."""
     user_id_str = str(user.id)
     note_id_str = str(note_id)
 
@@ -379,7 +447,7 @@ def query_note(
             cached_res = redis_client.get(cache_key)
             if cached_res:
                 log.info("qa_cache_hit", note_id=note_id_str, query=query)
-                return json.loads(cached_res)
+                return {"cached": json.loads(cached_res)}
         except Exception as e:
             log.warning("qa_cache_read_failed", error=str(e))
 
@@ -470,29 +538,87 @@ def query_note(
         },
     ]
 
-    evaluation_context = {"context": context, "query": query}
+    return {"prompt": prompt, "context": context, "top_chunks": top_chunks, "cache_key": cache_key,
+            "note_id": note_id_str, "query": query}
 
-    answer = ai(
-        prompt,
-        endpoint_name="query_note",
-        background_tasks=background_tasks,
-        evaluation_context=evaluation_context,
-        temperature=0.0,
-    )
 
-    res = {
-        "answer": answer,
-        "sources": [text for _, text in top_chunks],
-        "scores": [round(score, 3) for score, _ in top_chunks],
-    }
-
+def _cache_answer(cache_key: str, res: dict) -> None:
     if redis_client:
         try:
             redis_client.setex(cache_key, 3600, json.dumps(res))
         except Exception as e:
             log.warning("qa_cache_write_failed", error=str(e))
 
+
+@router.post("/{note_id}/query")
+@limiter.limit("15/minute")
+def query_note(
+    request: Request,
+    note_id: Union[int, str],
+    query: str,
+    background_tasks: BackgroundTasks,
+    db = Depends(get_db),
+    user = Depends(get_verified_user),
+):
+    prep = _prepare_note_query(note_id, query, user)
+    if "cached" in prep:
+        return prep["cached"]
+    answer = ai(
+        prep["prompt"],
+        endpoint_name="query_note",
+        background_tasks=background_tasks,
+        evaluation_context={"context": prep["context"], "query": query},
+        temperature=0.0,
+    )
+    res = {
+        "answer": answer,
+        "sources": [text for _, text in prep["top_chunks"]],
+        "scores": [round(score, 3) for score, _ in prep["top_chunks"]],
+    }
+    _cache_answer(prep["cache_key"], res)
     return res
+
+
+@router.post("/{note_id}/query/stream")
+@limiter.limit("15/minute")
+def query_note_stream(
+    request: Request,
+    note_id: Union[int, str],
+    query: str,
+    db = Depends(get_db),
+    user = Depends(get_verified_user),
+):
+    """Same as /{note_id}/query but streams the answer (Server-Sent Events).
+
+    Events: {"type": "delta", "text": "..."} ... then {"type": "done", "answer", "sources", "scores"}
+            (a cached answer comes back as a single "done"), or {"type": "error", "detail"}.
+    """
+    prep = _prepare_note_query(note_id, query, user)   # 403 / 404 / 502 happen before streaming
+
+    def events():
+        if "cached" in prep:
+            yield _sse({"type": "done", **prep["cached"]})
+            return
+        parts = []
+        try:
+            for delta in stream_ai(prep["prompt"], endpoint_name="query_note_stream", temperature=0.0):
+                parts.append(delta)
+                yield _sse({"type": "delta", "text": delta})
+        except Exception as e:
+            log.error("note_query_stream_failed", note_id=prep["note_id"], error=str(e))
+            if not parts:
+                yield _sse({"type": "error", "detail": "Sorry, I couldn't answer that right now. Please try again."})
+                return
+        res = {
+            "answer": "".join(parts),
+            "sources": [text for _, text in prep["top_chunks"]],
+            "scores": [round(score, 3) for score, _ in prep["top_chunks"]],
+        }
+        _cache_answer(prep["cache_key"], res)
+        yield _sse({"type": "done", **res})
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 @router.delete("/{note_id}")

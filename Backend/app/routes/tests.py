@@ -31,7 +31,7 @@ router = APIRouter(prefix="/tests", tags=["tests"])
 # 🔥 GENERATE TEST
 @router.post("/generate", response_model=TestGenerateResponse)
 @limiter.limit("5/minute")
-async def generate_test(
+def generate_test(
     request: Request,
     topic: str = Form(None),
     difficulty: str = Form("easy"),
@@ -44,7 +44,7 @@ async def generate_test(
     test_topic = topic
 
     if file:
-        content_bytes = await file.read()
+        content_bytes = file.file.read()   # sync endpoint: runs in the threadpool
         if file.filename.lower().endswith(".pdf"):
             import fitz
             pdf = fitz.open(stream=content_bytes, filetype="pdf")
@@ -207,6 +207,7 @@ def submit_test(data: TestSubmitRequest, db = Depends(get_db), user = Depends(ge
         "test_id": test_id_str
     })
 
+    unique_weak = list(set(weak_topics))
     if existing_result:
         best_score = max(existing_result.get("best_score", 0), score)
         test_results_col.update_one(
@@ -215,6 +216,7 @@ def submit_test(data: TestSubmitRequest, db = Depends(get_db), user = Depends(ge
                 "last_score": score,
                 "best_score": best_score,
                 "last_feedback": ai_feedback,
+                "weak_topics": unique_weak,
             }}
         )
     else:
@@ -224,6 +226,7 @@ def submit_test(data: TestSubmitRequest, db = Depends(get_db), user = Depends(ge
             "best_score": score,
             "last_score": score,
             "last_feedback": ai_feedback,
+            "weak_topics": unique_weak,
         })
 
     return {

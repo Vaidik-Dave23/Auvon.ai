@@ -20,6 +20,8 @@ from app.routes import stats
 from app.routes import goals
 from app.routes import tests
 from app.routes import videos
+from app.routes import tutor
+from app.routes import voice_tutor
 
 configure_logging()
 log = get_logger(__name__)
@@ -80,3 +82,5 @@ app.include_router(stats.router)
 app.include_router(goals.router)
 app.include_router(tests.router)
 app.include_router(videos.router)
+app.include_router(tutor.router)
+app.include_router(voice_tutor.router)

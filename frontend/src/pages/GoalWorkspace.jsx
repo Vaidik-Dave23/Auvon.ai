@@ -4,6 +4,7 @@ import api from "../api/axios";
 import confetti from "canvas-confetti";
 import Sidebar from "../components/Sidebar";
 import VideoCard from "../components/VideoCard";
+import TutorPanel from "../components/TutorPanel";
 import {
   isVerifiedVideo,
   isDocResource,
@@ -573,6 +574,9 @@ function GoalWorkspace() {
           </>
         )}
       </main>
+
+      {/* Socratic AI Tutor Panel */}
+      <TutorPanel goalId={goalId} />
     </div>
   );
 }

@@ -2,11 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import Sidebar from "../components/Sidebar";
 import api from "../api/axios";
+import { postStream, throttled } from "../api/stream";
 import ReactMarkdown from "react-markdown";
 import rehypeKatex from "rehype-katex";
 import remarkMath from "remark-math";
 import "katex/dist/katex.min.css";
 import VideoCard from "../components/VideoCard";
+import TutorPanel from "../components/TutorPanel";
 import { extractYouTubeId } from "../utils/youtube";
 
 const preprocessMarkdown = (content) => {
@@ -99,7 +101,14 @@ function NoteReader() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const [note, setNote] = useState(location.state || null);
+  // /note/new with { streamQuery } in router state: the note is written live (streamed)
+  const streamQuery = id === "new" ? location.state?.streamQuery : null;
+  const [note, setNote] = useState(
+    streamQuery ? { title: streamQuery, content: "", source: "keyword" } : location.state || null
+  );
+  const [streaming, setStreaming] = useState(!!streamQuery);
+  const [streamError, setStreamError] = useState("");
+  const streamStartedRef = useRef(false);
   const [chatInput, setChatInput] = useState("");
   const [chatMessages, setChatMessages] = useState([]);
   const [chatLoading, setChatLoading] = useState(false);
@@ -112,6 +121,83 @@ function NoteReader() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages, chatLoading]);
+
+  // Stream a brand-new note: text appears as the model writes it.
+  useEffect(() => {
+    if (!streamQuery || streamStartedRef.current) return;
+    streamStartedRef.current = true; // StrictMode runs effects twice in dev: start once
+    let buffer = "";
+    let timer = null;
+    const flush = () => {
+      timer = null;
+      setNote((n) => ({ ...n, content: buffer }));
+    };
+    const finish = (saved) => {
+      clearTimeout(timer);
+      setNote(saved);
+      setStreaming(false);
+      navigate(`/note/${saved.id}`, { replace: true, state: saved });
+    };
+    const fallback = async () => {
+      // streaming not possible (old backend, proxy, expired token...): use the normal endpoint
+      try {
+        const gen = await api.post(`/notes/generate?query=${encodeURIComponent(streamQuery)}`);
+        finish(gen.data.note);
+      } catch (err) {
+        setStreaming(false);
+        setStreamError(err.response?.data?.detail || "Generation failed. Please try again.");
+      }
+    };
+    (async () => {
+      let res;
+      try {
+        res = await fetch(`${import.meta.env.VITE_API_URL}/notes/generate/stream?query=${encodeURIComponent(streamQuery)}`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${localStorage.getItem("token") || ""}` },
+        });
+      } catch {
+        return fallback();
+      }
+      if (!res.ok || !res.body) return fallback();
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let carry = "";
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          carry += decoder.decode(value, { stream: true });
+          let cut;
+          while ((cut = carry.indexOf("\n\n")) >= 0) {
+            const block = carry.slice(0, cut);
+            carry = carry.slice(cut + 2);
+            const line = block.split("\n").find((l) => l.startsWith("data:"));
+            if (!line) continue;
+            const evt = JSON.parse(line.slice(5));
+            if (evt.type === "delta") {
+              buffer += evt.text;
+              if (!timer) timer = setTimeout(flush, 100); // ~10 renders/sec keeps markdown + KaTeX smooth
+            } else if (evt.type === "done") {
+              return finish(evt.note);
+            } else if (evt.type === "error") {
+              throw new Error(evt.detail);
+            }
+          }
+        }
+        throw new Error("The connection closed before the note was finished.");
+      } catch (err) {
+        clearTimeout(timer);
+        if (buffer) {
+          flush();
+          setStreaming(false);
+          setStreamError("The connection dropped before the note was saved. Try generating it again.");
+        } else {
+          fallback();
+        }
+        console.error(err);
+      }
+    })();
+  }, [streamQuery, navigate]);
 
   // Fetch note by ID if not passed in routing state
   useEffect(() => {
@@ -145,25 +231,58 @@ function NoteReader() {
     setChatMessages((prev) => [...prev, { role: "user", text: userMessage }]);
     setChatLoading(true);
 
+    // Stream the answer word by word; fall back to the normal endpoint if streaming isn't possible.
+    let text = "";
+    let started = false;
+    const setLast = (patch) =>
+      setChatMessages((prev) => {
+        const next = [...prev];
+        next[next.length - 1] = { ...next[next.length - 1], ...patch };
+        return next;
+      });
+    const render = throttled((t) => setLast({ text: t }));
     try {
-      const res = await api.post(`/notes/${id}/query?query=${encodeURIComponent(userMessage)}`);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: res.data.answer,
-          sources: res.data.sources,
+      await postStream(`/notes/${id}/query/stream`, {
+        params: { query: userMessage },
+        onEvent: (evt) => {
+          if (evt.type === "delta") {
+            text += evt.text;
+            if (!started) {
+              started = true;
+              setChatLoading(false);
+              setChatMessages((prev) => [...prev, { role: "assistant", text }]);
+            } else {
+              render(text);
+            }
+          } else if (evt.type === "done") {
+            render.cancel();
+            if (!started) {
+              started = true;
+              setChatMessages((prev) => [...prev, { role: "assistant", text: evt.answer, sources: evt.sources }]);
+            } else {
+              setLast({ text: evt.answer || text, sources: evt.sources });
+            }
+          }
         },
-      ]);
+      });
     } catch (err) {
+      render.cancel();
       console.error(err);
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          text: "Sorry, I encountered an error while searching the document. Please try again.",
-        },
-      ]);
+      if (started) {
+        setLast({ text: `${text}\n\n_(The answer was cut short. Please ask again.)_` });
+      } else if (err.status === 403 || err.status === 429) {
+        setChatMessages((prev) => [...prev, { role: "assistant", text: err.detail || "You can't ask about this note right now." }]);
+      } else {
+        try {
+          const res = await api.post(`/notes/${id}/query?query=${encodeURIComponent(userMessage)}`);
+          setChatMessages((prev) => [...prev, { role: "assistant", text: res.data.answer, sources: res.data.sources }]);
+        } catch {
+          setChatMessages((prev) => [
+            ...prev,
+            { role: "assistant", text: "Sorry, I encountered an error while searching the document. Please try again." },
+          ]);
+        }
+      }
     } finally {
       setChatLoading(false);
     }
@@ -194,7 +313,7 @@ function NoteReader() {
             Back to Library
           </button>
 
-          {note && (
+          {note && !streaming && (
             <button
               onClick={handleCopyNoteContent}
               className="auvon-pill-btn-secondary text-xs py-2 px-4 cursor-pointer flex items-center gap-1.5"
@@ -224,6 +343,12 @@ function NoteReader() {
                     <span className="auvon-telemetry-badge">
                       {note.source === "pdf" ? "PDF Document Note" : "AI Study Note"}
                     </span>
+                    {streaming && (
+                      <span className="auvon-telemetry-badge flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent-primary)] animate-pulse" />
+                        {note.content ? "Writing…" : "Starting…"}
+                      </span>
+                    )}
                   </div>
 
                   <h1 className="text-2xl lg:text-3xl font-bold tracking-tight text-[var(--text-primary)] font-heading mb-6 leading-snug">
@@ -310,6 +435,24 @@ function NoteReader() {
                     >
                       {preprocessMarkdown(note.content)}
                     </ReactMarkdown>
+                    {streaming && !note.content && (
+                      <div className="flex flex-col gap-3 animate-pulse mt-2" aria-label="Writing your note">
+                        <div className="h-4 w-full bg-[var(--border-subtle)] rounded" />
+                        <div className="h-4 w-5/6 bg-[var(--border-subtle)] rounded" />
+                        <div className="h-4 w-4/6 bg-[var(--border-subtle)] rounded" />
+                      </div>
+                    )}
+                    {streaming && note.content && (
+                      <span className="inline-block w-2 h-5 align-middle bg-[var(--accent-primary)] animate-pulse rounded-sm" aria-hidden="true" />
+                    )}
+                    {streamError && (
+                      <p className="mt-4 text-sm" style={{ color: "#DC2626" }}>
+                        {streamError}{" "}
+                        <button type="button" onClick={() => navigate("/notes")} className="underline cursor-pointer">
+                          Back to notes
+                        </button>
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -405,15 +548,15 @@ function NoteReader() {
                   <form onSubmit={handleSendQuestion} className="flex gap-2 pt-2 border-t border-[var(--border-subtle)]">
                     <input
                       type="text"
-                      placeholder="Ask about this note..."
+                      placeholder={streaming ? "Available once the note is written…" : "Ask about this note..."}
                       value={chatInput}
                       onChange={(e) => setChatInput(e.target.value)}
-                      disabled={chatLoading}
+                      disabled={chatLoading || streaming || id === "new"}
                       className="flex-1 bg-[var(--bg-surface-subtle)] border border-[var(--border-subtle)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] px-3.5 py-2.5 rounded-xl text-xs focus:outline-none focus:border-[var(--accent-primary)] focus:ring-1 focus:ring-[var(--accent-primary)] transition-all font-sans"
                     />
                     <button
                       type="submit"
-                      disabled={chatLoading || !chatInput.trim()}
+                      disabled={chatLoading || streaming || id === "new" || !chatInput.trim()}
                       className="auvon-pill-btn-primary px-3 py-2 text-xs flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -427,6 +570,9 @@ function NoteReader() {
           )
         )}
       </main>
+
+      {/* Socratic AI Tutor Panel */}
+      {!streaming && id !== "new" && <TutorPanel noteId={id} />}
     </div>
   );
 }

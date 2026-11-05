@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   searchNotes,
-  generateNotes,
   getMyNotes,
   uploadPDF,
 } from "../api/notes";
@@ -73,9 +72,8 @@ function Notes() {
           setStatusText("Loading existing note...");
           navigate(`/note/${res.data[0].id}`, { state: res.data[0] });
         } else {
-          setStatusText("Writing detailed study notes...");
-          const gen = await generateNotes(activeQuery);
-          navigate(`/note/${gen.data.note.id}`, { state: gen.data.note });
+          // open the note page right away and let it stream the note in as it is written
+          navigate("/note/new", { state: { streamQuery: activeQuery } });
         }
       }
     } catch (err) {

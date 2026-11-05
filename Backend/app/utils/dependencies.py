@@ -13,8 +13,8 @@ logger = get_logger(__name__)
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY")
-ALGORITHM = os.getenv("ALGORITHM")
+SECRET_KEY = os.getenv("SECRET_KEY")  # never hardcode a fallback: a known secret lets anyone forge tokens
+ALGORITHM = os.getenv("ALGORITHM", "HS256")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
@@ -49,13 +49,25 @@ def get_current_user(
         user = User(**cached_user)
     else:
         user_doc = users_col.find_one(id_filter(user_id))
+        if not user_doc and payload.get("sub"):
+            user_email = str(payload.get("sub")).strip()
+            user_doc = users_col.find_one({"email": user_email})
+            if not user_doc:
+                import re
+                user_doc = users_col.find_one({"email": re.compile(f"^{re.escape(user_email)}$", re.IGNORECASE)})
+            if user_doc:
+                doc_id_str = str(user_doc.get("_id"))
+                if not user_doc.get("id"):
+                    users_col.update_one({"_id": user_doc["_id"]}, {"$set": {"id": doc_id_str}})
+                    user_doc["id"] = doc_id_str
+
         if user_doc:
             user_doc = serialize_doc(user_doc)
             user = User(**user_doc)
             if redis_client:
                 try:
                     redis_client.setex(
-                        f"user:{user_id}",
+                        f"user:{user.id}",
                         30,
                         json.dumps({
                             "id": user.id,

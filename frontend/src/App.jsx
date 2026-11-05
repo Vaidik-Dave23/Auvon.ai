@@ -19,6 +19,7 @@ import Tests from "./pages/Tests";
 import TestAttempt from "./pages/TestAttempt";
 import TestResult from "./pages/TestResult";
 import VideoLesson from "./pages/VideoLesson";
+import VoiceTutor from "./pages/VoiceTutor";
 
 function App() {
   return (
@@ -41,6 +42,8 @@ function App() {
           <Route path="/learn/video/:videoId" element={<ProtectedRoute><VideoLesson /></ProtectedRoute>} />
           <Route path="/notes" element={<ProtectedRoute><Notes /></ProtectedRoute>} />
           <Route path="/note/:id" element={<ProtectedRoute><NoteReader /></ProtectedRoute>} />
+          <Route path="/note/:id/call" element={<ProtectedRoute><VoiceTutor /></ProtectedRoute>} />
+          <Route path="/call" element={<ProtectedRoute><VoiceTutor /></ProtectedRoute>} />
           <Route path="/tests" element={<ProtectedRoute><Tests /></ProtectedRoute>} />
           <Route path="/test/:id" element={<ProtectedRoute><TestAttempt /></ProtectedRoute>} />
           <Route path="/result/:id" element={<ProtectedRoute><TestResult /></ProtectedRoute>} />

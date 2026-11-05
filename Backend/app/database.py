@@ -31,8 +31,8 @@ if _has_pymongo and MONGODB_URI:
     try:
         client = MongoClient(
             MONGODB_URI,
-            serverSelectionTimeoutMS=5000,
-            connectTimeoutMS=5000,
+            serverSelectionTimeoutMS=2000,
+            connectTimeoutMS=2000,
         )
         db = client[MONGODB_DATABASE]
     except Exception as e:
@@ -55,6 +55,7 @@ else:
 
     class MockDB:
         def __getitem__(self, name): return MockCollection()
+        def command(self, *args, **kwargs): return {"ok": 1}
 
     db = MockDB()
 
@@ -72,11 +73,17 @@ test_results_col = db["test_results"]
 user_answers_col = db["user_answers"]
 ai_logs_col = db["ai_logs"]
 document_chunks_col = db["document_chunks"]
+tutor_sessions_col = db["tutor_sessions"]
+tutor_usage_col = db["tutor_usage"]
+tutor_lessons_col = db["tutor_lessons"]
 
 
 def init_db():
     """Ensure essential indexes exist for performance and uniqueness."""
     try:
+        if db is None or not (_has_pymongo and MONGODB_URI):
+            return
+        db.command("ping")
         users_col.create_index("email", unique=True)
         users_col.create_index("id", sparse=True)
         tasks_col.create_index("user_id")
@@ -89,6 +96,9 @@ def init_db():
         test_results_col.create_index([("user_id", 1), ("test_id", 1)])
         user_answers_col.create_index([("user_id", 1), ("test_id", 1)])
         document_chunks_col.create_index("note_id")
+        tutor_sessions_col.create_index([("user_id", 1), ("updated_at", -1)])
+        tutor_usage_col.create_index([("user_id", 1), ("date", 1)], unique=True)
+        tutor_lessons_col.create_index([("user_id", 1), ("updated_at", -1)])
         log.info("mongo_indexes_initialized")
     except Exception as e:
         log.warning("mongo_index_init_warning", error=str(e))
@@ -115,10 +125,16 @@ def to_object_id(val):
 
 
 def id_filter(val):
-    """Returns a MongoDB filter that matches either _id (as ObjectId) or id (string/int)."""
-    conditions = [{"id": val}, {"id": str(val)}]
+    """Returns a MongoDB filter that matches either _id (as ObjectId/str/int) or id (string/int)."""
+    val_str = str(val) if val is not None else ""
+    conditions = [
+        {"id": val},
+        {"id": val_str},
+        {"_id": val_str},
+    ]
     try:
         conditions.append({"id": int(val)})
+        conditions.append({"_id": int(val)})
     except (ValueError, TypeError):
         pass
     obj_id = to_object_id(val)

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, useParams, useNavigate } from "react-router-dom";
 import api from "../api/axios";
 import Sidebar from "../components/Sidebar";
+import TutorPanel from "../components/TutorPanel";
 
 function TestResult() {
   const { id } = useParams();
@@ -10,6 +11,8 @@ function TestResult() {
 
   const [result, setResult] = useState(location.state || null);
   const [loading, setLoading] = useState(!location.state);
+  const [tutorOpen, setTutorOpen] = useState(false);
+  const [tutorInitialMsg, setTutorInitialMsg] = useState("");
 
   useEffect(() => {
     if (!location.state) fetchResult();
@@ -142,9 +145,28 @@ function TestResult() {
                       </p>
 
                       {!item.is_correct && (
-                        <p className="font-mono text-[var(--text-secondary)]">
-                          Correct response: <span className="text-[var(--accent-primary)] font-semibold">{item.correct_answer}</span>
-                        </p>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+                          <p className="font-mono text-[var(--text-secondary)]">
+                            Correct response: <span className="text-[var(--accent-primary)] font-semibold">{item.correct_answer}</span>
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const prompt = `Question: ${item.question}\nMy answer: ${item.your_answer || "Not answered"}\nCorrect answer: ${item.correct_answer}\n\nHelp me understand why my answer was wrong.`;
+                              setTutorInitialMsg(prompt);
+                              setTutorOpen(true);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-mono font-medium border transition cursor-pointer hover:opacity-90 active:scale-95 self-start sm:self-auto"
+                            style={{
+                              backgroundColor: "var(--accent-soft)",
+                              borderColor: "var(--accent-border)",
+                              color: "var(--accent-primary)",
+                            }}
+                            title="Ask AI tutor to explain why this answer is wrong"
+                          >
+                            <span>💡 Explain this</span>
+                          </button>
+                        </div>
                       )}
                     </div>
                   </div>
@@ -171,6 +193,14 @@ function TestResult() {
           </button>
         </div>
       </main>
+
+      {/* Socratic AI Tutor Panel */}
+      <TutorPanel
+        testId={id}
+        isOpen={tutorOpen}
+        onClose={() => setTutorOpen(false)}
+        initialMessage={tutorInitialMsg}
+      />
     </div>
   );
 }

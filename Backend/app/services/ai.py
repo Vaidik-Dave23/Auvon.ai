@@ -111,7 +111,7 @@ def _load_openai_key() -> str | None:
 # Raw HTTP callers
 # ---------------------------------------------------------------------------
 
-def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 90, temperature: float = None) -> dict:
+def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 90, temperature: float = None, reasoning_effort: str = None) -> dict:
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
     
     max_retries = 2
@@ -120,7 +120,17 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 
             payload = {"model": model, "messages": messages}
             if temperature is not None:
                 payload["temperature"] = temperature
+            if reasoning_effort:
+                payload["reasoning_effort"] = reasoning_effort
             resp = _session.post(GEMINI_BASE_URL, headers=headers, json=payload, timeout=timeout)
+
+            # A model that does not accept this thinking level: retry once without it
+            # instead of failing over to the next key (which would fail the same way).
+            if resp.status_code == 400 and reasoning_effort:
+                log.warning("gemini_reasoning_effort_rejected", model=model, value=reasoning_effort)
+                payload.pop("reasoning_effort", None)
+                reasoning_effort = None
+                resp = _session.post(GEMINI_BASE_URL, headers=headers, json=payload, timeout=timeout)
             
             if resp.status_code == 200:
                 return resp.json()
@@ -139,6 +149,10 @@ def _call_gemini(api_key: str, model: str, messages: list[dict], timeout: int = 
                 
             raise RuntimeError(f"Gemini HTTP {resp.status_code} on {model}: {resp.text[:300]}")
             
+        except requests.exceptions.Timeout as e:
+            # The model is just slow: retrying the same key doubles the wait. Fail over instead.
+            log.warning("gemini_timeout", model=model, timeout_s=timeout)
+            raise e
         except requests.exceptions.RequestException as e:
             if attempt < max_retries - 1:
                 sleep_time = 1
@@ -185,9 +199,14 @@ def ai(
     background_tasks: BackgroundTasks = None,
     evaluation_context: dict = None,
     temperature: float = None,
+    reasoning_effort: str = None,
+    fast: bool = False,
 ) -> str:
     """
     Multi-provider AI caller with systematic cascading fallbacks.
+
+    fast=True (live voice): try the quicker Gemini model first with thinking
+    off, then the usual primary model, then OpenAI.
     """
     load_dotenv(override=True)
 
@@ -200,32 +219,39 @@ def ai(
     with tracer.start_as_current_span("llm_generate") as span:
         span.set_attribute("llm.endpoint_name", endpoint_name)
 
+        if fast:
+            first_model, first_effort = GEMINI_FALLBACK_MODEL, "none"
+            second_model, second_effort = GEMINI_PRIMARY_MODEL, (reasoning_effort or "low")
+        else:
+            first_model, first_effort = GEMINI_PRIMARY_MODEL, reasoning_effort
+            second_model, second_effort = GEMINI_FALLBACK_MODEL, reasoning_effort
+
         # ── Pass 1: Gemini primary ──────────────────────────────────────────
         keys = _load_gemini_keys()
         for key in keys:
             try:
-                response_json = _call_gemini(key, GEMINI_PRIMARY_MODEL, prompt, temperature=temperature)
-                used_model, used_provider = GEMINI_PRIMARY_MODEL, "gemini"
+                response_json = _call_gemini(key, first_model, prompt, temperature=temperature, reasoning_effort=first_effort)
+                used_model, used_provider = first_model, "gemini"
                 break
             except Exception as e:
                 last_error = e
-                LLM_CALLS.labels(provider="gemini", model=GEMINI_PRIMARY_MODEL, endpoint=endpoint_name, outcome="error").inc()
-                log.warning("gemini_key_failed", key_suffix=key[-4:], model=GEMINI_PRIMARY_MODEL, error=str(e))
+                LLM_CALLS.labels(provider="gemini", model=first_model, endpoint=endpoint_name, outcome="error").inc()
+                log.warning("gemini_key_failed", key_suffix=key[-4:], model=first_model, error=str(e))
 
         # ── Pass 2: Gemini fallback model ─────────────────────────────────────
         if response_json is None:
             keys = _load_gemini_keys()
             if keys:
-                log.info("gemini_falling_back_to_secondary_model", model=GEMINI_FALLBACK_MODEL, key_count=len(keys))
+                log.info("gemini_falling_back_to_secondary_model", model=second_model, key_count=len(keys))
                 for key in keys:
                     try:
-                        response_json = _call_gemini(key, GEMINI_FALLBACK_MODEL, prompt, temperature=temperature)
-                        used_model, used_provider = GEMINI_FALLBACK_MODEL, "gemini"
+                        response_json = _call_gemini(key, second_model, prompt, temperature=temperature, reasoning_effort=second_effort)
+                        used_model, used_provider = second_model, "gemini"
                         break
                     except Exception as e:
                         last_error = e
-                        LLM_CALLS.labels(provider="gemini", model=GEMINI_FALLBACK_MODEL, endpoint=endpoint_name, outcome="error").inc()
-                        log.warning("gemini_key_failed", key_suffix=key[-4:], model=GEMINI_FALLBACK_MODEL, error=str(e))
+                        LLM_CALLS.labels(provider="gemini", model=second_model, endpoint=endpoint_name, outcome="error").inc()
+                        log.warning("gemini_key_failed", key_suffix=key[-4:], model=second_model, error=str(e))
 
         # ── Pass 3: OpenAI safety net ─────────────────────────────────────────
         if response_json is None:
@@ -319,6 +345,117 @@ def ai(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+def stream_ai(prompt: list[dict], endpoint_name: str = "custom", temperature: float = None):
+    """
+    Stream a completion as text deltas (a generator of str).
+
+    Tries the fast Gemini model with thinking off, then the primary model,
+    across all keys, switching key/model only BEFORE the first token arrives.
+    If every streaming attempt fails, falls back to the normal ai() call and
+    yields the whole answer at once, so callers always get text or an error.
+    Records the same metrics and ai_logs entry as ai().
+    """
+    load_dotenv(override=True)
+    attempts = []
+    for model, effort in ((GEMINI_FALLBACK_MODEL, "none"), (GEMINI_PRIMARY_MODEL, "low")):
+        for key in _load_gemini_keys():
+            attempts.append((key, model, effort))
+
+    start = time.time()
+    last_error = None
+    for key, model, effort in attempts:
+        payload = {"model": model, "messages": prompt, "stream": True,
+                   "stream_options": {"include_usage": True}}
+        if temperature is not None:
+            payload["temperature"] = temperature
+        if effort:
+            payload["reasoning_effort"] = effort
+        headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        try:
+            resp = _session.post(GEMINI_BASE_URL, headers=headers, json=payload, stream=True, timeout=(10, 45))
+            if resp.status_code == 400:
+                # an optional field this model does not accept: retry once with the bare request
+                resp.close()
+                payload.pop("reasoning_effort", None)
+                payload.pop("stream_options", None)
+                resp = _session.post(GEMINI_BASE_URL, headers=headers, json=payload, stream=True, timeout=(10, 45))
+            if resp.status_code != 200:
+                body = resp.text[:300]
+                resp.close()
+                if resp.status_code == 429 and _is_daily_quota_error(body):
+                    _mark_daily_exhausted(key)
+                raise RuntimeError(f"Gemini HTTP {resp.status_code} on {model}: {body}")
+        except Exception as e:
+            last_error = e
+            LLM_CALLS.labels(provider="gemini", model=model, endpoint=endpoint_name, outcome="error").inc()
+            log.warning("gemini_stream_key_failed", key_suffix=key[-4:], model=model, error=str(e))
+            continue
+
+        parts, usage, first_token_at = [], {}, None
+        try:
+            for line in resp.iter_lines(decode_unicode=True):
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                if chunk.get("usage"):
+                    usage = chunk["usage"]
+                for choice in chunk.get("choices") or []:
+                    delta = (choice.get("delta") or {}).get("content")
+                    if delta:
+                        if first_token_at is None:
+                            first_token_at = time.time()
+                        parts.append(delta)
+                        yield delta
+        except Exception as e:
+            resp.close()
+            if not parts:
+                last_error = e
+                log.warning("gemini_stream_broke_before_first_token", model=model, error=str(e))
+                continue
+            log.warning("gemini_stream_cut_short", model=model, error=str(e), chars=len("".join(parts)))
+        finally:
+            resp.close()
+        if not parts:
+            last_error = RuntimeError(f"empty stream from {model}")
+            continue
+
+        latency = time.time() - start
+        content = "".join(parts)
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+        LLM_LATENCY.labels(provider="gemini", model=model, endpoint=endpoint_name).observe(latency)
+        LLM_CALLS.labels(provider="gemini", model=model, endpoint=endpoint_name, outcome="success").inc()
+        LLM_TOKENS.labels(provider="gemini", model=model, token_type="prompt").inc(prompt_tokens)
+        LLM_TOKENS.labels(provider="gemini", model=model, token_type="completion").inc(completion_tokens)
+        log.info("llm_stream_complete", endpoint=endpoint_name, model=f"gemini/{model}", latency_s=round(latency, 2),
+                 first_token_s=round((first_token_at or time.time()) - start, 2), total_tokens=prompt_tokens + completion_tokens)
+        try:
+            ai_logs_col.insert_one({
+                "endpoint": f"{endpoint_name}_gemini/{model}",
+                "prompt": json.dumps(prompt, indent=2),
+                "response": content,
+                "latency": latency,
+                "first_token_latency": (first_token_at - start) if first_token_at else None,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+                "created_at": datetime.datetime.utcnow(),
+            })
+        except Exception as db_err:
+            log.error("ai_log_db_write_failed", error=str(db_err))
+        return
+
+    # Every streaming attempt failed before producing text: use the normal router (incl. OpenAI).
+    log.warning("stream_ai_falling_back_to_blocking", endpoint=endpoint_name, last_error=str(last_error))
+    yield ai(prompt, endpoint_name=endpoint_name, temperature=temperature, fast=True)
+
 
 def _parse_json_response(raw: str, context: str):
     """Strip markdown fences and parse JSON; raises HTTP 502 on failure."""
@@ -430,7 +567,7 @@ def generate_plan(goal: str, weeks: int) -> list[dict]:
     return plan
 
 
-def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
+def build_notes_prompt(query: str, is_pdf: bool = False) -> list[dict]:
     """
     Optimized notes generation prompt for maximum structural performance 
     and flawless LaTeX/Markdown compatibility with the frontend parser.
@@ -505,8 +642,11 @@ def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
         {"role": "system", "content": system_instruction},
         {"role": "user", "content": user_content}
     ]
+    return prompt
 
-    return ai(prompt, endpoint_name="generate_notes")
+
+def generate_ai_notes(query: str, is_pdf: bool = False) -> str:
+    return ai(build_notes_prompt(query, is_pdf), endpoint_name="generate_notes", fast=True)
 
 
 def generate_questions(topic: str, num: int, difficulty: str) -> list[dict]:

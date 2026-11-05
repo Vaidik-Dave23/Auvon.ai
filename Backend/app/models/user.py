@@ -10,7 +10,11 @@ class User:
         self.email = kwargs.get("email", "")
         self.password = kwargs.get("password", "")
         self.created_at = kwargs.get("created_at") or datetime.utcnow()
-        self.is_verified = kwargs.get("is_verified", False)
+        raw_verified = kwargs.get("is_verified", False)
+        if isinstance(raw_verified, str):
+            self.is_verified = raw_verified.lower() in ("true", "1", "yes")
+        else:
+            self.is_verified = bool(raw_verified)
         self.verification_code = kwargs.get("verification_code")
         self.verification_code_expires_at = kwargs.get("verification_code_expires_at")
 

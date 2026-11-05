@@ -33,6 +33,24 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Handle user not found (e.g. database reset/migrated or deleted account)
+    if (
+      error.response &&
+      error.response.status === 404 &&
+      error.response.data?.detail === "User not found"
+    ) {
+      localStorage.removeItem("token");
+      sessionStorage.clear();
+      if (
+        !window.location.pathname.startsWith("/login") &&
+        !window.location.pathname.startsWith("/register") &&
+        window.location.pathname !== "/"
+      ) {
+        window.location.href = "/login";
+      }
+      return Promise.reject(error);
+    }
+
     // Handle email unverified
     if (
       error.response &&

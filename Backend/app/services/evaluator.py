@@ -43,7 +43,6 @@ Output ONLY valid JSON in this exact structure:
 
 def _judge(messages: list[dict]) -> str | None:
     """Run evaluation prompt through Gemini first, OpenAI fallback."""
-    from app.services.ai import llm_router
 
     # Try Gemini judge (preferred — fast and cheap)
     try:

@@ -43,6 +43,7 @@ export default function GoogleAuthButton({
         "is_verified",
         res.data.is_verified ? "true" : "false"
       );
+      api.defaults.headers.common["Authorization"] = `Bearer ${res.data.access_token}`;
 
       if (onSuccess) {
         onSuccess(res.data);

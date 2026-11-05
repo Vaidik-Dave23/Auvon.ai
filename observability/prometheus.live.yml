@@ -1,0 +1,14 @@
+# Scrapes the LIVE backend on Azure App Service over HTTPS.
+# (prometheus.yml next to this file is the local-dev version.)
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: "auvon-backend"
+    scheme: https
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["auvonai-bpfmakg2crfjfnar.indiasouthcentral-01.azurewebsites.net"]
+        labels:
+          env: "production"

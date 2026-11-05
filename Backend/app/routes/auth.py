@@ -172,13 +172,14 @@ def _handle_google_auth(payload: GoogleAuthRequest, db):
     if not id_info.get("email_verified", False):
         raise HTTPException(status_code=400, detail="Google account email is not verified")
 
-    email = id_info.get("email")
+    email = (id_info.get("email") or "").strip()
     if not email:
         raise HTTPException(status_code=400, detail="Google token does not contain an email address")
 
     name = id_info.get("name") or id_info.get("given_name") or email.split("@")[0]
 
-    db_user = users_col.find_one({"email": email})
+    import re
+    db_user = users_col.find_one({"email": re.compile(f"^{re.escape(email)}$", re.IGNORECASE)})
     if not db_user:
         random_password = hash_password(secrets.token_urlsafe(32))
         new_user = {
@@ -198,11 +199,14 @@ def _handle_google_auth(payload: GoogleAuthRequest, db):
         db_user["id"] = user_id_str
     else:
         user_id_str = str(db_user.get("_id") or db_user.get("id"))
-        if not db_user.get("is_verified"):
-            users_col.update_one({"_id": db_user["_id"]}, {"$set": {"is_verified": True}})
-            db_user["is_verified"] = True
+        update_fields = {"is_verified": True}
+        if not db_user.get("id"):
+            update_fields["id"] = user_id_str
+            db_user["id"] = user_id_str
+        users_col.update_one({"_id": db_user["_id"]}, {"$set": update_fields})
+        db_user["is_verified"] = True
 
-    access_token = create_access_token(data={"sub": email, "id": user_id_str})
+    access_token = create_access_token(data={"sub": db_user.get("email", email), "id": user_id_str})
     return {
         "access_token": access_token,
         "token_type": "bearer",
