@@ -1,0 +1,156 @@
+{
+  "run_at": "2026-11-05 07:38 UTC",
+  "config": {
+    "topics": [
+      "Binary Search Trees",
+      "TCP Congestion Control",
+      "Photosynthesis",
+      "Bayes' Theorem",
+      "The French Revolution",
+      "Transformer Neural Networks"
+    ],
+    "quick": false,
+    "primary_model": "gemini-3.5-flash",
+    "fast_model": "gemini-2.5-flash",
+    "fallback_model": "gpt-4o-mini",
+    "judge_models": [
+      "gemini-2.5-flash",
+      "gpt-4o-mini"
+    ]
+  },
+  "dataset": {
+    "topics": [
+      "Binary Search Trees",
+      "TCP Congestion Control",
+      "Photosynthesis",
+      "Bayes' Theorem",
+      "The French Revolution",
+      "Transformer Neural Networks"
+    ],
+    "notes_chars": {
+      "Binary Search Trees": 16583,
+      "TCP Congestion Control": 17793,
+      "Photosynthesis": 18873,
+      "Bayes' Theorem": 18704,
+      "The French Revolution": 23926,
+      "Transformer Neural Networks": 26848
+    },
+    "answerable": 36,
+    "unanswerable": 12
+  },
+  "errors": {},
+  "latency": {
+    "notes": {
+      "n": 3,
+      "blocking_full_median_s": 29.542821884155273,
+      "stream_first_token_median_s": 1.0232875347137451,
+      "stream_full_median_s": 34.781511545181274
+    },
+    "qa": {
+      "n": 8,
+      "blocking_full_median_s": 4.634247779846191,
+      "blocking_full_p90_s": 7.553219556808472,
+      "stream_first_token_median_s": 1.1555371284484863,
+      "stream_first_token_p90_s": 1.2190017700195312,
+      "stream_full_median_s": 1.3567609786987305
+    }
+  },
+  "failover": {
+    "baseline": {
+      "runs": 5,
+      "succeeded": 5,
+      "latency_median_s": 5.623599529266357,
+      "served_by": {
+        "gemini/gemini-3.5-flash": 4,
+        "gemini/gemini-2.5-flash": 1
+      }
+    },
+    "bad_key_first": {
+      "runs": 5,
+      "succeeded": 4,
+      "latency_median_s": 8.616655230522156,
+      "served_by": {
+        "gemini/gemini-3.5-flash": 2,
+        "gemini/gemini-2.5-flash": 2
+      }
+    },
+    "gemini_down": {
+      "runs": 5,
+      "succeeded": 0,
+      "latency_median_s": null,
+      "served_by": {}
+    },
+    "stream_bad_key_first": {
+      "runs": 5,
+      "succeeded": 5,
+      "first_token_median_s": 2.22502064704895
+    },
+    "bad_key_overhead_median_s": 2.9930557012557983,
+    "openai_direct": {
+      "ok": false,
+      "error": "OpenAI 429: {\n    \"error\": {\n        \"message\": \"You have no credits remaining. Add credits to continue using the API at https://platform.openai.com/settings/organization/billing/.\",\n        \"type\": \"insufficient"
+    }
+  },
+  "engineering": {
+    "tests_passed": 78,
+    "tests_failed": 0,
+    "api_endpoints": 60,
+    "streaming_endpoints": 3,
+    "backend_python_loc": 7167,
+    "frontend_loc": 9198,
+    "runtime_dependencies": 28
+  },
+  "retrieval": {
+    "semantic (production)": {
+      "chunks_per_note_avg": 31.5,
+      "hit@1": 0.6111111111111112,
+      "hit@3": 0.7777777777777778,
+      "hit@6": 0.9444444444444444,
+      "mrr": 0.7270622895622896,
+      "context_recall": 0.9444444444444444,
+      "avg_chunks_in_context": 6.0,
+      "ranking_time_median_s": 0.030403450015001,
+      "n": 36
+    },
+    "fixed-size baseline": {
+      "chunks_per_note_avg": 25.833333333333332,
+      "hit@1": 0.3888888888888889,
+      "hit@3": 0.6944444444444444,
+      "hit@6": 0.8055555555555556,
+      "mrr": 0.5800273528214706,
+      "context_recall": 0.8055555555555556,
+      "avg_chunks_in_context": 6.0,
+      "ranking_time_median_s": 0.016477499972097576,
+      "n": 36
+    },
+    "embedding_dim": 3072,
+    "embedding_latency_median_s": 0.6585361957550049,
+    "embedding_latency_p90_s": 0.9483966827392578,
+    "embedding_calls_measured": 223
+  },
+  "generation": {
+    "n_answerable": 36,
+    "n_unanswerable": 12,
+    "judge_gemini": {
+      "n": 36,
+      "faithfulness": 1.0,
+      "relevance": 1.0,
+      "correctness": 0.9722222222222222,
+      "share_fully_faithful": 1.0
+    },
+    "judge_openai": null,
+    "judge_gemini_with_prod_3000char_truncation": null,
+    "judge_agreement_faithfulness_within_0.25": null,
+    "false_refusal_rate": 0.027777777777777776,
+    "correct_refusal_rate_unanswerable": 0.9166666666666666,
+    "citation_coverage_mean": 0.8732653061224489,
+    "answers_fully_cited": 0.5142857142857142,
+    "invalid_citation_refs": 0,
+    "answer_latency_median_s": 4.364459753036499,
+    "answer_latency_p90_s": 6.332109212875366,
+    "served_by": {
+      "gemini/gemini-3.5-flash": 48
+    },
+    "lowest_faithfulness_examples": []
+  }
+}

@@ -1,0 +1,389 @@
+{
+  "created": "2026-11-05T07:14:50.569009+00:00",
+  "items": [
+    {
+      "id": "binary-search-trees-a1",
+      "topic": "Binary Search Trees",
+      "type": "answerable",
+      "question": "What is the worst-case time complexity of searching in a skewed binary search tree?",
+      "reference_answer": "O(n)",
+      "evidence": "Average: O(log n), Worst: O(n) for skewed trees."
+    },
+    {
+      "id": "binary-search-trees-a2",
+      "topic": "Binary Search Trees",
+      "type": "answerable",
+      "question": "How does the BST insertion operation traverse the tree to find where a new node should go?",
+      "reference_answer": "It starts from the root and compares the new key with the current node's key to decide whether to move left or right.",
+      "evidence": "It traverses the tree from the root, comparing the new key with current node's key to decide whether to go left or right"
+    },
+    {
+      "id": "binary-search-trees-a3",
+      "topic": "Binary Search Trees",
+      "type": "answerable",
+      "question": "What list of keys is inserted into the binary search tree in the example usage script?",
+      "reference_answer": "[50, 30, 70, 20, 40, 60, 80]",
+      "evidence": "keys_to_insert = [50, 30, 70, 20, 40, 60, 80]"
+    },
+    {
+      "id": "binary-search-trees-a4",
+      "topic": "Binary Search Trees",
+      "type": "answerable",
+      "question": "Why do traditional sorted arrays have an O(n) time complexity for insertion and deletion?",
+      "reference_answer": "Because elements must be shifted during insertion and deletion.",
+      "evidence": "Traditional sorted arrays allow for $O(\\log n)$ search but $O(n)$ insertion/deletion due to shifting elements."
+    },
+    {
+      "id": "binary-search-trees-a5",
+      "topic": "Binary Search Trees",
+      "type": "answerable",
+      "question": "Why are symbol tables or dictionaries used in compilers and interpreters?",
+      "reference_answer": "To store and retrieve variable names alongside their associated attributes.",
+      "evidence": "In compilers and interpreters to store and retrieve variable names and their associated attributes."
+    },
+    {
+      "id": "binary-search-trees-a6",
+      "topic": "Binary Search Trees",
+      "type": "answerable",
+      "question": "What basic elements are contained within a binary search tree node structure?",
+      "reference_answer": "A key value, pointers or references to its left and right children, and optionally a parent pointer.",
+      "evidence": "Each node encapsulates a value (key) and pointers/references to its left and right children, and optionally a pointer to its parent."
+    },
+    {
+      "id": "binary-search-trees-u1",
+      "topic": "Binary Search Trees",
+      "type": "unanswerable",
+      "question": "How do you perform a level-order (breadth-first) traversal on a Binary Search Tree, and what auxiliary data structure is required?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "binary-search-trees-u2",
+      "topic": "Binary Search Trees",
+      "type": "unanswerable",
+      "question": "How do tree rotations work in self-balancing variants like AVL or Red-Black trees to maintain balance?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "tcp-congestion-control-a1",
+      "topic": "TCP Congestion Control",
+      "type": "answerable",
+      "question": "During the Slow Start phase of TCP Reno, by how much is the congestion window (`cwnd`) increased upon receiving a new ACK?",
+      "reference_answer": "It is increased by `acked_bytes`, which is approximately 1 MSS for each ACK.",
+      "evidence": "cwnd += acked_bytes; // Approximately 1 MSS for each ACK"
+    },
+    {
+      "id": "tcp-congestion-control-a2",
+      "topic": "TCP Congestion Control",
+      "type": "answerable",
+      "question": "In TCP Reno, how are `ssthresh` and `cwnd` adjusted when a Retransmission Timeout (RTO) occurs?",
+      "reference_answer": "`ssthresh` is set to `cwnd/2` and `cwnd` is reduced to 1 MSS.",
+      "evidence": "On RTO: `ssthresh = cwnd/2`, `cwnd = 1 MSS`"
+    },
+    {
+      "id": "tcp-congestion-control-a3",
+      "topic": "TCP Congestion Control",
+      "type": "answerable",
+      "question": "What scenario occurs without congestion control when individual optimization by senders leads to system-wide network degradation?",
+      "reference_answer": "A \"tragedy of the commons\" scenario.",
+      "evidence": "a \"tragedy of the commons\" scenario where individual optimization leads to system-wide degradation."
+    },
+    {
+      "id": "tcp-congestion-control-a4",
+      "topic": "TCP Congestion Control",
+      "type": "answerable",
+      "question": "In the Jacobson/Karels algorithm, how is the initial RTTVAR calculated upon receiving the first RTT sample?",
+      "reference_answer": "It is set to half of the new RTT sample (`new_rtt_sample / 2`).",
+      "evidence": "rttvar = new_rtt_sample / 2; // Initial RTTVAR = SRTT/2"
+    },
+    {
+      "id": "tcp-congestion-control-a5",
+      "topic": "TCP Congestion Control",
+      "type": "answerable",
+      "question": "During the Congestion Avoidance phase, by how much is `cwnd` increased for every Round-Trip Time (RTT)?",
+      "reference_answer": "`cwnd` is increased by approximately one MSS per RTT.",
+      "evidence": "For every Round-Trip Time (RTT), `cwnd` is increased by approximately one MSS."
+    },
+    {
+      "id": "tcp-congestion-control-a6",
+      "topic": "TCP Congestion Control",
+      "type": "answerable",
+      "question": "What are the typical minimum and maximum Retransmission Timeout (RTO) values specified under RFC 6298?",
+      "reference_answer": "The typical minimum RTO is 200 ms and the typical maximum RTO is 60 s.",
+      "evidence": "Minimum RTO: Typically $200 \\text{ms}$. Maximum RTO: Typically $60 \\text{s}$."
+    },
+    {
+      "id": "tcp-congestion-control-u1",
+      "topic": "TCP Congestion Control",
+      "type": "unanswerable",
+      "question": "How does Karn's algorithm solve the issue of RTT measurement ambiguity when an ACK is received for a retransmitted segment?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "tcp-congestion-control-u2",
+      "topic": "TCP Congestion Control",
+      "type": "unanswerable",
+      "question": "What mathematical formula does TCP Cubic use to calculate the congestion window as a function of time elapsed since the last packet loss?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "photosynthesis-a1",
+      "topic": "Photosynthesis",
+      "type": "answerable",
+      "question": "Under what environmental conditions does photosynthesis operate while maintaining high quantum efficiency?",
+      "reference_answer": "Ambient conditions (temperature and pressure).",
+      "evidence": "operating under ambient conditions (temperature, pressure) with remarkably high quantum efficiency."
+    },
+    {
+      "id": "photosynthesis-a2",
+      "topic": "Photosynthesis",
+      "type": "answerable",
+      "question": "What value is returned by the quantum yield calculation if incident photons per second per square meter is zero or less?",
+      "reference_answer": "0.0",
+      "evidence": "Returns 0.0 if incident_photons_per_s_m2 is zero to avoid division by zero."
+    },
+    {
+      "id": "photosynthesis-a3",
+      "topic": "Photosynthesis",
+      "type": "answerable",
+      "question": "What amounts of ATP, NADPH, and CO2 are required for the synthesis of glucose?",
+      "reference_answer": "18 ATP, 12 NADPH, and 6 CO2 molecules.",
+      "evidence": "Energy cost for glucose synthesis is 18 ATP and 12 NADPH, requiring 6 $CO_2$ molecules."
+    },
+    {
+      "id": "photosynthesis-a4",
+      "topic": "Photosynthesis",
+      "type": "answerable",
+      "question": "What principle do limiting factors like light, temperature, and CO2 concentration often follow in dictating photosynthetic rates?",
+      "reference_answer": "The Law of the Minimum.",
+      "evidence": "Limiting factors like light, $CO_2$, and temperature dictate the overall photosynthetic rate, often following the Law of the Minimum."
+    },
+    {
+      "id": "photosynthesis-a5",
+      "topic": "Photosynthesis",
+      "type": "answerable",
+      "question": "Where does the cytochrome b6f complex pump protons during light-dependent reactions?",
+      "reference_answer": "Into the thylakoid lumen.",
+      "evidence": "The cytochrome $b_6f$ complex pumps protons into the thylakoid lumen."
+    },
+    {
+      "id": "photosynthesis-a6",
+      "topic": "Photosynthesis",
+      "type": "answerable",
+      "question": "How many chlorophyll molecules per reaction center are contained within a photosynthetic unit?",
+      "reference_answer": "Approximately 250 to 400 chlorophyll molecules per reaction center.",
+      "evidence": "required to fix one $CO_2$ molecule or evolve one $O_2$ molecule. ~$250-400$ chlorophyll molecules per reaction center."
+    },
+    {
+      "id": "photosynthesis-u1",
+      "topic": "Photosynthesis",
+      "type": "unanswerable",
+      "question": "What are the specific absorption spectrum peaks for chlorophyll a and chlorophyll b, and how do accessory pigments like carotenoids assist in light absorption?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "photosynthesis-u2",
+      "topic": "Photosynthesis",
+      "type": "unanswerable",
+      "question": "What is the photosynthetic light compensation point, and how do light intensity levels impact the overall rate of net photosynthesis?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "bayes-theorem-a1",
+      "topic": "Bayes' Theorem",
+      "type": "answerable",
+      "question": "What primary disadvantage stems from assuming features are conditionally independent in Naive Bayes models?",
+      "reference_answer": "The assumption is frequently violated in real-world data, leading to suboptimal results.",
+      "evidence": "**\"Naive\" independence assumption** (features are conditionally independent) often violated in real data, leading to suboptimal but still useful results."
+    },
+    {
+      "id": "bayes-theorem-a2",
+      "topic": "Bayes' Theorem",
+      "type": "answerable",
+      "question": "Why is log(P(class | text)) computed instead of raw probability when predicting class labels for text?",
+      "reference_answer": "It is calculated to ensure numerical stability.",
+      "evidence": "We calculate log(P(class | text)) for numerical stability."
+    },
+    {
+      "id": "bayes-theorem-a3",
+      "topic": "Bayes' Theorem",
+      "type": "answerable",
+      "question": "How is Bayesian state estimation utilized in robotics and autonomous systems?",
+      "reference_answer": "It is used for localization and mapping, often via Kalman filters.",
+      "evidence": "State estimation (e.g., Kalman filters, which have a Bayesian foundation) for localization and mapping."
+    },
+    {
+      "id": "bayes-theorem-a4",
+      "topic": "Bayes' Theorem",
+      "type": "answerable",
+      "question": "What is the training complexity of Naive Bayes for document classification on large datasets?",
+      "reference_answer": "It is typically O(N · L), where N is the number of documents and L is the average document length.",
+      "evidence": "**Highly scalable** for large datasets; training is often $O(N \\cdot L)$ where $N$ is documents, $L$ is avg. doc length."
+    },
+    {
+      "id": "bayes-theorem-a5",
+      "topic": "Bayes' Theorem",
+      "type": "answerable",
+      "question": "What does the prior probability P(Disease) represent in a medical diagnosis context?",
+      "reference_answer": "It represents the prevalence of the disease across the general population.",
+      "evidence": "$P(\\text{Disease})$ is the prevalence of the disease in the general population (e.g., 1 in 10,000 people)."
+    },
+    {
+      "id": "bayes-theorem-a6",
+      "topic": "Bayes' Theorem",
+      "type": "answerable",
+      "question": "What error is raised if probability values fall outside the range of 0 to 1 in the medical diagnosis function?",
+      "reference_answer": "A ValueError stating that all probabilities must be between 0 and 1.",
+      "evidence": "raise ValueError(\"All probabilities must be between 0 and 1.\")"
+    },
+    {
+      "id": "bayes-theorem-u1",
+      "topic": "Bayes' Theorem",
+      "type": "unanswerable",
+      "question": "Who originally formulated Bayes' Theorem, and in what year was his paper on the topic posthumously published?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "bayes-theorem-u2",
+      "topic": "Bayes' Theorem",
+      "type": "unanswerable",
+      "question": "How is Bayes' Theorem mathematically expressed for continuous random variables using probability density functions (PDFs)?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "the-french-revolution-a1",
+      "topic": "The French Revolution",
+      "type": "answerable",
+      "question": "What is the purpose of the trigger_event method in the sentiment simulation?",
+      "reference_answer": "It simulates how a specific historical event affects public sentiment.",
+      "evidence": "Simulates the impact of a specific historical event on public sentiment."
+    },
+    {
+      "id": "the-french-revolution-a2",
+      "topic": "The French Revolution",
+      "type": "answerable",
+      "question": "What factors caused political instability and frequent constitutional changes during the French Revolution?",
+      "reference_answer": "Radicalization (such as the Reign of Terror under the Jacobins), external wars, and internal factionalism.",
+      "evidence": "The revolution experienced radicalization (e.g., Reign of Terror under Jacobins), external wars, and internal factionalism, leading to significant political instability and frequent constitutional changes."
+    },
+    {
+      "id": "the-french-revolution-a3",
+      "topic": "The French Revolution",
+      "type": "answerable",
+      "question": "When does revolutionary fervor increase more significantly during a sentiment update?",
+      "reference_answer": "When the grievance accumulator exceeds the injustice tolerance threshold.",
+      "evidence": "# Revolutionary fervor increases, especially if tolerance is exceeded"
+    },
+    {
+      "id": "the-french-revolution-a4",
+      "topic": "The French Revolution",
+      "type": "answerable",
+      "question": "Which foundational governance principles were introduced by the French Revolution?",
+      "reference_answer": "Republicanism, citizenship, human rights (through the Declaration of the Rights of Man and of the Citizen), and secularism.",
+      "evidence": "It introduced concepts like **republicanism, citizenship, human rights (via the Declaration of the Rights of Man and of the Citizen), and secularism** as foundational principles for governance."
+    },
+    {
+      "id": "the-french-revolution-a5",
+      "topic": "The French Revolution",
+      "type": "answerable",
+      "question": "How many executions are estimated to have occurred during the Reign of Terror between 1793 and 1794?",
+      "reference_answer": "Approximately 17,000 official executions, with potential total deaths reaching up to 40,000.",
+      "evidence": "$\\approx 17,000$ official executions, possibly up to $40,000$ total deaths."
+    },
+    {
+      "id": "the-french-revolution-a6",
+      "topic": "The French Revolution",
+      "type": "answerable",
+      "question": "What proportion of the Ancien Régime's annual revenue was spent on interest payments in 1788?",
+      "reference_answer": "Approximately 50% of annual revenue.",
+      "evidence": "$\\approx 50\\%$ of annual revenue dedicated to interest payments."
+    },
+    {
+      "id": "the-french-revolution-u1",
+      "topic": "The French Revolution",
+      "type": "unanswerable",
+      "question": "Who was the reigning monarch of France at the start of the French Revolution in 1789?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "the-french-revolution-u2",
+      "topic": "The French Revolution",
+      "type": "unanswerable",
+      "question": "What notable execution device became famously associated with the Reign of Terror?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "transformer-neural-networks-a1",
+      "topic": "Transformer Neural Networks",
+      "type": "answerable",
+      "question": "How are positions 8 and 9 masked out for the second sample in the code example?",
+      "reference_answer": "By setting mask[1, :, :, 8:] = False.",
+      "evidence": "mask[1, :, :, 8:] = False # Mask out positions 8, 9 for the second sample"
+    },
+    {
+      "id": "transformer-neural-networks-a2",
+      "topic": "Transformer Neural Networks",
+      "type": "answerable",
+      "question": "Why are positional embeddings injected into input representations?",
+      "reference_answer": "They provide information about the sequence order, which attention mechanisms inherently lack.",
+      "evidence": "Positional embeddings inject information about the sequence order, which attention mechanisms inherently lack."
+    },
+    {
+      "id": "transformer-neural-networks-a3",
+      "topic": "Transformer Neural Networks",
+      "type": "answerable",
+      "question": "What effect does Layer Normalization have on feature dimensions after a residual connection?",
+      "reference_answer": "It rescales them to zero mean and unit variance to ensure consistent input ranges.",
+      "evidence": "Layer Normalization rescales them to have zero mean and unit variance."
+    },
+    {
+      "id": "transformer-neural-networks-a4",
+      "topic": "Transformer Neural Networks",
+      "type": "answerable",
+      "question": "What core tasks are Large Language Models (LLMs) used for in production implementations?",
+      "reference_answer": "Conversational AI, content generation, and code completion.",
+      "evidence": "Core architecture for conversational AI, content generation, and code completion."
+    },
+    {
+      "id": "transformer-neural-networks-a5",
+      "topic": "Transformer Neural Networks",
+      "type": "answerable",
+      "question": "What is the primary function of scaled dot-product attention?",
+      "reference_answer": "It computes the similarity between a query and keys to generate weights that dictate how much focus each value receives.",
+      "evidence": "Computes the \"similarity\" between a query and keys, producing a set of weights that determine how much focus to place on each value."
+    },
+    {
+      "id": "transformer-neural-networks-a6",
+      "topic": "Transformer Neural Networks",
+      "type": "answerable",
+      "question": "What is self.w_o defined as in the practical code implementation?",
+      "reference_answer": "An nn.Linear layer projecting from d_model to d_model representing the output projection matrix.",
+      "evidence": "self.w_o = nn.Linear(d_model, d_model) # Output projection matrix"
+    },
+    {
+      "id": "transformer-neural-networks-u1",
+      "topic": "Transformer Neural Networks",
+      "type": "unanswerable",
+      "question": "What optimizer and learning rate warm-up schedule are used to train standard Transformer models effectively?",
+      "reference_answer": null,
+      "evidence": null
+    },
+    {
+      "id": "transformer-neural-networks-u2",
+      "topic": "Transformer Neural Networks",
+      "type": "unanswerable",
+      "question": "What is the computational time complexity of the scaled dot-product attention mechanism relative to the sequence length N?",
+      "reference_answer": null,
+      "evidence": null
+    }
+  ]
+}

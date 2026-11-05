@@ -1,0 +1,2 @@
+# per-call cache so interrupted runs resume; regenerated on demand
+cache/

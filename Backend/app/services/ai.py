@@ -178,7 +178,8 @@ def _call_openai(api_key: str, messages: list[dict], timeout: int = 90, temperat
     resp = _session.post(OPENAI_BASE_URL, headers=headers, json=payload, timeout=timeout)
 
     if resp.status_code == 429:
-        raise RuntimeError("OpenAI rate limit (429)")
+        # body says whether it is a real rate limit or "insufficient_quota" (no credit left)
+        raise RuntimeError(f"OpenAI 429: {resp.text[:200]}")
 
     if resp.status_code == 401:
         raise RuntimeError("Invalid OpenAI API key (401)")

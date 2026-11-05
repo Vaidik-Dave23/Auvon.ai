@@ -435,6 +435,71 @@ def generate_from_pdf(
     return {"source": "ai", "note": note_to_dict(new_note)}
 
 
+# ── Retrieval + grounded-answer prompt (shared by the API and benchmarks/) ─────
+SIMILARITY_THRESHOLD = 0.3
+MAX_CONTEXT_CHUNKS = 6
+FALLBACK_CONTEXT_CHUNKS = 3
+
+
+def rank_chunks(query_emb: list[float], chunks: list[dict]) -> list[tuple[float, str]]:
+    """(cosine score, chunk text) for every embedded chunk, best first."""
+    scored = []
+    for c in chunks:
+        emb = c.get("embedding")
+        if emb:
+            scored.append((cosine_similarity(query_emb, emb), c.get("chunk_text", "")))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored
+
+
+def select_context_chunks(scored: list[tuple[float, str]]) -> list[tuple[float, str]]:
+    """Up to 6 chunks above the similarity threshold; if none clear it, the best 3."""
+    top_chunks = [(score, text) for score, text in scored[:MAX_CONTEXT_CHUNKS] if score >= SIMILARITY_THRESHOLD]
+    return top_chunks or scored[:FALLBACK_CONTEXT_CHUNKS]
+
+
+def build_context(top_chunks: list[tuple[float, str]]) -> str:
+    context_parts = []
+    for rank, (score, text) in enumerate(top_chunks, 1):
+        context_parts.append(f"[Source {rank} — relevance {score:.0%}]\n{text}")
+    return "\n\n---\n\n".join(context_parts)
+
+
+NOT_COVERED_REPLY = "This specific information isn't covered in the provided document sections."
+
+
+def build_qa_prompt(context: str, query: str) -> list[dict]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "You are a strict, expert study assistant. Your job is to answer the student's question "
+                "using ONLY the provided document excerpts.\n\n"
+                "STRICT RULES:\n"
+                "1. STRICT CONTEXT ADHERENCE: Answer the question using ONLY the facts explicitly stated in the "
+                "provided document excerpts. If a fact or detail is not directly and explicitly mentioned in the "
+                "excerpts, you must treat it as completely non-existent. Do not use your own prior knowledge, "
+                "external background information, or any outside examples under any circumstances.\n"
+                "2. NO EXTRAPOLATION: Do not infer, extrapolate, or assume facts beyond what is written.\n"
+                "3. NO HELPFUL ADDITIONS: Do not add extra explanations, background, examples, or additional context.\n"
+                "4. CITATION ENFORCEMENT: Every single factual claim, statement, definition, or bullet point in your answer "
+                "MUST end with a citation mapping to the specific source chunk it was drawn from (e.g., [Source 1] or [Source 2]).\n"
+                "5. If the answer is NOT in the excerpts at all, you must respond with: "
+                f"'{NOT_COVERED_REPLY}' Do not attempt to answer."
+            ),
+        },
+        {
+            "role": "user",
+            "content": (
+                f"DOCUMENT EXCERPTS:\n\n{context}\n\n"
+                f"---\n\n"
+                f"QUESTION: {query}\n\n"
+                "Please provide a thorough, specific answer based on the document excerpts above."
+            ),
+        },
+    ]
+
+
 def _prepare_note_query(note_id, query: str, user) -> dict:
     """Auth check, cache lookup, retrieval and prompt for a note question (no model call)."""
     user_id_str = str(user.id)
@@ -501,55 +566,10 @@ def _prepare_note_query(note_id, query: str, user) -> dict:
     if not chunks:
         raise HTTPException(status_code=400, detail="No retrievable content found for this note")
 
-    scored = []
-    for c in chunks:
-        emb = c.get("embedding")
-        if emb:
-            scored.append((cosine_similarity(query_emb, emb), c.get("chunk_text", "")))
-    scored.sort(key=lambda x: x[0], reverse=True)
-
-    SIMILARITY_THRESHOLD = 0.3
-    top_chunks = [
-        (score, text) for score, text in scored[:6]
-        if score >= SIMILARITY_THRESHOLD
-    ]
-    if not top_chunks:
-        top_chunks = scored[:3]
-
-    context_parts = []
-    for rank, (score, text) in enumerate(top_chunks, 1):
-        context_parts.append(f"[Source {rank} — relevance {score:.0%}]\n{text}")
-    context = "\n\n---\n\n".join(context_parts)
-
-    prompt = [
-        {
-            "role": "system",
-            "content": (
-                "You are a strict, expert study assistant. Your job is to answer the student's question "
-                "using ONLY the provided document excerpts.\n\n"
-                "STRICT RULES:\n"
-                "1. STRICT CONTEXT ADHERENCE: Answer the question using ONLY the facts explicitly stated in the "
-                "provided document excerpts. If a fact or detail is not directly and explicitly mentioned in the "
-                "excerpts, you must treat it as completely non-existent. Do not use your own prior knowledge, "
-                "external background information, or any outside examples under any circumstances.\n"
-                "2. NO EXTRAPOLATION: Do not infer, extrapolate, or assume facts beyond what is written.\n"
-                "3. NO HELPFUL ADDITIONS: Do not add extra explanations, background, examples, or additional context.\n"
-                "4. CITATION ENFORCEMENT: Every single factual claim, statement, definition, or bullet point in your answer "
-                "MUST end with a citation mapping to the specific source chunk it was drawn from (e.g., [Source 1] or [Source 2]).\n"
-                "5. If the answer is NOT in the excerpts at all, you must respond with: "
-                "'This specific information isn't covered in the provided document sections.' Do not attempt to answer."
-            ),
-        },
-        {
-            "role": "user",
-            "content": (
-                f"DOCUMENT EXCERPTS:\n\n{context}\n\n"
-                f"---\n\n"
-                f"QUESTION: {query}\n\n"
-                "Please provide a thorough, specific answer based on the document excerpts above."
-            ),
-        },
-    ]
+    scored = rank_chunks(query_emb, chunks)
+    top_chunks = select_context_chunks(scored)
+    context = build_context(top_chunks)
+    prompt = build_qa_prompt(context, query)
 
     return {"prompt": prompt, "context": context, "top_chunks": top_chunks, "cache_key": cache_key,
             "note_id": note_id_str, "query": query}
